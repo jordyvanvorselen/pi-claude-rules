@@ -1,0 +1,46 @@
+{
+  "name": "pi-claude-rules",
+  "version": "0.1.0",
+  "description": "Load Claude Code rules from .claude/rules into pi: list them in the system prompt, inline always-apply rules, and inject path-scoped rules when the agent touches matching files.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jordy van Vorselen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jordyvanvorselen/pi-claude-rules.git"
+  },
+  "homepage": "https://github.com/jordyvanvorselen/pi-claude-rules#readme",
+  "files": [
+    "src/**/*.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "claude-code",
+    "rules",
+    "cursor-rules",
+    "extension"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.0",
+    "@earendil-works/pi-tui": "^0.87.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
