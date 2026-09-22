@@ -80,6 +80,8 @@ describe("extension wiring", () => {
 		mkdirSync(join(root, ".claude", "rules"), { recursive: true });
 		mkdirSync(join(root, "backend", "src", "main"), { recursive: true });
 		mkdirSync(join(root, ".pi"), { recursive: true });
+		// Existing activation-focused cases opt into the efficient compatibility mode.
+		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
 		writeFileSync(join(root, ".claude", "rules", "java.md"), '---\npaths:\n  - "backend/src/main/**/*.java"\n---\n# Java rule\n\nUse records.');
 		writeFileSync(join(root, ".claude", "rules", "always.md"), "---\nalwaysApply: true\ndescription: Team basics\n---\nBe kind.");
 		writeFileSync(join(root, ".claude", "rules", "free.md"), "# Free rule\n\nUnscoped body.");
@@ -98,6 +100,22 @@ describe("extension wiring", () => {
 		assert.match(prompt, /- Java rule \(\.claude\/rules\/java\.md\)\. applies to: backend\/src\/main\/\*\*\/\*\.java\./);
 		assert.match(prompt, /- Free rule \(\.claude\/rules\/free\.md\)\. applies to any task\./);
 		assert.ok(!prompt.includes("Unscoped body."), "unscoped rules are listed, not inlined, by default");
+	});
+
+	it("uses eager loading by default before the first tool call", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		try {
+			const h = harness(root);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			const result = await h.fire("before_agent_start", { systemPrompt: "BASE", prompt: "hi" });
+			const prompt = String(result?.systemPrompt);
+			assert.match(prompt, /Use records\./);
+			assert.match(prompt, /Unscoped body\./);
+			await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
+			assert.equal(h.sent.length, 0, "eager loading does not queue a tool-call message");
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
 	});
 
 	it("injects a scoped rule once when a matching file is edited", async () => {
@@ -159,7 +177,7 @@ describe("extension wiring", () => {
 	});
 
 	it("appends the rule to the tool result in toolResult mode", async () => {
-		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ activation: "toolResult", notify: false }));
+		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", activation: "toolResult", notify: false }));
 		try {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
@@ -177,19 +195,19 @@ describe("extension wiring", () => {
 			assert.match(content[1]!.text, /Use records\./);
 			assert.equal(h.notices.length, 0);
 		} finally {
-			rmSync(join(root, ".pi", "claude-rules.json"));
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
 		}
 	});
 
 	it("inlines unscoped rules when unscopedRules is inject", async () => {
-		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ unscopedRules: "inject" }));
+		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", unscopedRules: "inject" }));
 		try {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
 			const result = await h.fire("before_agent_start", { systemPrompt: "BASE", prompt: "hi" });
 			assert.match(String(result?.systemPrompt), /Unscoped body\./);
 		} finally {
-			rmSync(join(root, ".pi", "claude-rules.json"));
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
 		}
 	});
 

@@ -35,10 +35,10 @@ describe("pathsFromCommand", () => {
 		assert.deepEqual(pathsFromCommand("ls -la src https://x.y/z.ts missing/b.ts", cwd), []);
 	});
 	it("handles redirects, separators and ./ prefixes", () => {
-		assert.deepEqual(pathsFromCommand("echo hi >./src/a.ts; make Makefile", cwd), [join(cwd, "src", "a.ts")]);
+		assert.deepEqual(pathsFromCommand("echo hi >./src/a.ts; make Makefile", cwd), [join(cwd, "src", "a.ts"), join(cwd, "Makefile")]);
 	});
 	it("ignores tokens without a slash or extension", () => {
-		assert.deepEqual(pathsFromCommand("make Makefile", cwd), []);
+		assert.deepEqual(pathsFromCommand("make Makefile", cwd), [join(cwd, "Makefile")]);
 	});
 });
 
@@ -55,8 +55,8 @@ describe("pathsFromToolCall", () => {
 		assert.deepEqual(pathsFromToolCall("edit", { path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "x.ts")]);
 		assert.deepEqual(pathsFromToolCall("read", { path: join(cwd, "src", "x.ts") }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "x.ts")]);
 	});
-	it("skips files that do not exist for read and edit", () => {
-		assert.deepEqual(pathsFromToolCall("read", { path: "src/missing.ts" }, cwd, DEFAULT_SETTINGS), []);
+	it("keeps prospective files but rejects directories for read and edit", () => {
+		assert.deepEqual(pathsFromToolCall("read", { path: "src/missing.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "missing.ts")]);
 		assert.deepEqual(pathsFromToolCall("edit", { path: "src" }, cwd, DEFAULT_SETTINGS), []);
 	});
 	it("keeps new file paths for write", () => {
