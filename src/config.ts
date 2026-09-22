@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 export type UnscopedMode = "list" | "inject";
 export type ActivationMode = "message" | "toolResult";
+export type StartupSummary = "compact" | "full" | "off";
 
 export interface Settings {
 	directories: string[];
@@ -12,6 +13,7 @@ export interface Settings {
 	tools: string[];
 	bashActivation: boolean;
 	activation: ActivationMode;
+	startupSummary: StartupSummary;
 	notify: boolean;
 	enabled: boolean;
 }
@@ -25,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	tools: ["read", "write", "edit"],
 	bashActivation: true,
 	activation: "message",
+	startupSummary: "compact",
 	notify: true,
 	enabled: true,
 };
@@ -63,6 +66,7 @@ export function mergeSettings(...layers: Partial<Settings>[]): Settings {
 		if (Array.isArray(layer.tools)) merged.tools = layer.tools.filter((t) => typeof t === "string");
 		if (typeof layer.bashActivation === "boolean") merged.bashActivation = layer.bashActivation;
 		if (layer.activation === "message" || layer.activation === "toolResult") merged.activation = layer.activation;
+		if (layer.startupSummary === "compact" || layer.startupSummary === "full" || layer.startupSummary === "off") merged.startupSummary = layer.startupSummary;
 		if (typeof layer.notify === "boolean") merged.notify = layer.notify;
 		if (typeof layer.enabled === "boolean") merged.enabled = layer.enabled;
 	}

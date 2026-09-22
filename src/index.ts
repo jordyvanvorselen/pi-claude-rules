@@ -1,20 +1,28 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Box, Text } from "@earendil-works/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { activateRules, pathsFromToolCall, type Activation } from "./activation.ts";
 import { loadSettings, type Settings } from "./config.ts";
-import { isInlined, renderActivation, renderSection, scopeLabel } from "./prompt.ts";
+import { isInlined, renderActivation, renderSection } from "./prompt.ts";
 import { loadRules, type Rule } from "./rules.ts";
 import { buildSources } from "./sources.ts";
+import { buildSummary, countsLine, type Paint, PLAIN, renderSummary, type RuleSummary } from "./summary.ts";
 
 export const CUSTOM_TYPE = "claude-rules";
 
-interface ActivationDetails {
+export interface ActivatedRule {
 	ruleId: string;
 	name: string;
 	displayPath: string;
-	path: string;
 	globs: string[];
 }
+
+export interface ActivationEntry {
+	kind: "activation";
+	path: string;
+	rules: ActivatedRule[];
+}
+
+export type EntryData = RuleSummary | ActivationEntry;
 
 interface State {
 	settings: Settings;
@@ -36,33 +44,43 @@ function freshState(cwd: string): State {
 	};
 }
 
-function injectedFromSession(ctx: ExtensionContext): Set<string> {
-	const ids = new Set<string>();
+type LooseEntry = { kind?: string; ruleId?: string; rules?: { ruleId?: string }[] };
+
+function ownEntries(ctx: ExtensionContext): LooseEntry[] {
+	const found: LooseEntry[] = [];
 	for (const entry of ctx.sessionManager.getBranch()) {
 		if (entry.type !== "custom_message" && entry.type !== "custom") continue;
 		if (entry.customType !== CUSTOM_TYPE) continue;
-		const data = (entry.type === "custom_message" ? entry.details : entry.data) as Partial<ActivationDetails> | undefined;
-		if (data?.ruleId) ids.add(data.ruleId);
+		const data = entry.type === "custom_message" ? entry.details : entry.data;
+		if (data && typeof data === "object") found.push(data as LooseEntry);
+	}
+	return found;
+}
+
+function injectedFromSession(ctx: ExtensionContext): Set<string> {
+	const ids = new Set<string>();
+	for (const data of ownEntries(ctx)) {
+		if (data.ruleId) ids.add(data.ruleId);
+		for (const rule of data.rules ?? []) if (rule.ruleId) ids.add(rule.ruleId);
 	}
 	return ids;
 }
 
-function detailsFor(activation: Activation): ActivationDetails {
-	return {
-		ruleId: activation.rule.id,
-		name: activation.rule.name,
-		displayPath: activation.rule.displayPath,
-		path: activation.path,
-		globs: activation.rule.globs,
-	};
+function hasSummaryEntry(ctx: ExtensionContext): boolean {
+	return ownEntries(ctx).some((data) => data.kind === "summary");
 }
 
-function describeRule(rule: Rule, settings: Settings): string {
-	const mode = isInlined(rule, settings) ? "inlined" : rule.mode === "scoped" ? "on match" : "listed";
-	const lines = [`${rule.name}  [${mode}]  ${scopeLabel(rule)}`, `    ${rule.displayPath}`];
-	if (rule.description) lines.push(`    ${rule.description}`);
-	for (const warning of rule.warnings) lines.push(`    warning: ${warning}`);
-	return lines.join("\n");
+function activatedRule(activation: Activation): ActivatedRule {
+	return { ruleId: activation.rule.id, name: activation.rule.name, displayPath: activation.rule.displayPath, globs: activation.rule.globs };
+}
+
+function activationEntry(activations: Activation[]): ActivationEntry {
+	return { kind: "activation", path: activations[0]?.path ?? "", rules: activations.map(activatedRule) };
+}
+
+function themePaint(theme: { fg: (color: never, text: string) => string }): Paint {
+	const fg = (color: string, text: string) => theme.fg(color as never, text);
+	return { heading: (t) => fg("mdHeading", t), accent: (t) => fg("accent", t), dim: (t) => fg("dim", t) };
 }
 
 export default function claudeRulesExtension(pi: ExtensionAPI) {
@@ -73,31 +91,38 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		state.injected = injectedFromSession(ctx);
 	};
 
-	const summary = () => {
-		const scoped = state.rules.filter((r) => r.mode === "scoped").length;
-		const always = state.rules.filter((r) => isInlined(r, state.settings)).length;
-		return `${state.rules.length} rule(s): ${always} always, ${scoped} path-scoped, ${state.rules.length - always - scoped} listed`;
-	};
+	const summary = () => buildSummary(state.rules, state.settings);
 
-	pi.registerMessageRenderer<ActivationDetails>(CUSTOM_TYPE, (message, { expanded, outputPad }, theme) => {
-		const details = message.details;
-		const head = theme.fg("accent", "rule ") + theme.fg("dim", "activated: ") + (details?.name ?? "unknown");
-		const where = details ? theme.fg("dim", ` (${details.displayPath}, via ${details.path})`) : "";
-		let text = head + where;
-		if (expanded) {
-			const content = typeof message.content === "string" ? message.content : message.content.map((c) => ("text" in c ? c.text : "")).join("\n");
-			text += `\n${content}`;
+	const appendSummary = () => pi.appendEntry<EntryData>(CUSTOM_TYPE, summary());
+
+	pi.registerEntryRenderer<EntryData>(CUSTOM_TYPE, (entry, { expanded }, theme) => {
+		const data = entry.data;
+		if (!data) return undefined;
+		const paint = themePaint(theme);
+		if (data.kind === "summary") {
+			const forceExpanded = state.settings.startupSummary === "full";
+			return new Text(renderSummary(data, paint, { expanded: expanded || forceExpanded }), 0, 0);
 		}
-		const box = new Box(outputPad, 1, (t) => theme.bg("customMessageBg", t));
-		box.addChild(new Text(text, 0, 0));
-		return box;
+		const act = data as Partial<ActivationEntry>;
+		if (!act.rules?.length) return undefined;
+		const names = act.rules.map((r) => r.name).join(", ");
+		const lines = [`${paint.heading("[Claude rules]")} ${paint.dim("activated")} ${names}`];
+		if (expanded) {
+			if (act.path) lines.push(paint.dim(`  via ${act.path}`));
+			const width = Math.max(...act.rules.map((r) => r.name.length));
+			for (const rule of act.rules) lines.push(paint.dim(`    ${rule.name.padEnd(width)}  ${rule.globs.join(", ")}`));
+		}
+		return new Text(lines.join("\n"), 0, 0);
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
 		reload(ctx);
-		if (state.rules.length > 0 && ctx.hasUI && state.settings.notify) {
-			ctx.ui.notify(`claude-rules: ${summary()}`, "info");
+		if (state.rules.length === 0 || !ctx.hasUI) return;
+		if (state.settings.startupSummary !== "off") {
+			if (!hasSummaryEntry(ctx)) appendSummary();
+			return;
 		}
+		if (state.settings.notify) ctx.ui.notify(`claude-rules: ${countsLine(summary())}`, "info");
 	});
 
 	pi.on("before_agent_start", async (event) => {
@@ -115,19 +140,17 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		if (fresh.length === 0) return;
 		for (const activation of fresh) state.injected.add(activation.rule.id);
 
+		pi.appendEntry<EntryData>(CUSTOM_TYPE, activationEntry(fresh));
+
 		if (state.settings.activation === "toolResult") {
 			state.pending.set(event.toolCallId, fresh);
-			for (const activation of fresh) pi.appendEntry(CUSTOM_TYPE, detailsFor(activation));
-		} else {
-			for (const activation of fresh) {
-				pi.sendMessage(
-					{ customType: CUSTOM_TYPE, content: renderActivation(activation.rule, activation.path), display: true, details: detailsFor(activation) },
-					{ deliverAs: "steer", triggerTurn: false },
-				);
-			}
+			return;
 		}
-		if (ctx.hasUI && state.settings.notify) {
-			ctx.ui.notify(`Rule activated: ${fresh.map((a) => a.rule.name).join(", ")}`, "info");
+		for (const activation of fresh) {
+			pi.sendMessage(
+				{ customType: CUSTOM_TYPE, content: renderActivation(activation.rule, activation.path), display: false, details: activatedRule(activation) },
+				{ deliverAs: "steer", triggerTurn: false },
+			);
 		}
 	});
 
@@ -150,20 +173,17 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 					return;
 				}
 				const status = state.injected.has(rule.id) ? "activated this session" : isInlined(rule, state.settings) ? "inlined in system prompt" : "not activated yet";
-				ctx.ui.notify(`${describeRule(rule, state.settings)}\n    status: ${status}\n\n${rule.body}`, "info");
+				const one = renderSummary(buildSummary([rule], state.settings), PLAIN, { expanded: true, details: true });
+				ctx.ui.notify(`${one}\n    status: ${status}\n\n${rule.body}`, "info");
 				return;
 			}
 			if (state.rules.length === 0) {
 				ctx.ui.notify(`claude-rules: no rules found. Looked in: ${state.sourceLabels.join(", ") || ".claude/rules, ~/.claude/rules"}`, "info");
 				return;
 			}
-			const lines = [`claude-rules: ${summary()}`, `sources: ${state.sourceLabels.join(", ")}`, ""];
-			for (const rule of state.rules) {
-				const marker = state.injected.has(rule.id) ? "* " : "  ";
-				lines.push(marker + describeRule(rule, state.settings));
-			}
-			lines.push("", "* = activated this session");
-			ctx.ui.notify(lines.join("\n"), "info");
+			const activated = new Set(state.rules.filter((r) => state.injected.has(r.id)).map((r) => r.displayPath));
+			const listing = renderSummary(summary(), PLAIN, { expanded: true, details: true, activated });
+			ctx.ui.notify(`${listing}\n\n* = activated this session`, "info");
 		},
 	});
 
@@ -172,7 +192,8 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			reload(ctx);
 			state.injected.clear();
-			ctx.ui.notify(`claude-rules reloaded: ${summary()}`, "info");
+			if (ctx.hasUI && state.rules.length > 0 && state.settings.startupSummary !== "off") appendSummary();
+			ctx.ui.notify(`claude-rules reloaded: ${countsLine(summary())}`, "info");
 		},
 	});
 }

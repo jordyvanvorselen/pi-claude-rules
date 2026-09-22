@@ -24,7 +24,28 @@ Or try it for one run without installing:
 pi -e git:github.com/jordyvanvorselen/pi-claude-rules
 ```
 
-Put rule files in `.claude/rules/` in your project. Start pi. You will see a notification like `claude-rules: 30 rule(s): 0 always, 30 path-scoped, 0 listed`.
+Put rule files in `.claude/rules/` in your project. Start pi. A `[Claude rules]` block appears under pi's own `[Skills]` and `[Extensions]` blocks:
+
+```
+[Claude rules]
+  api-versioning, authorization, design-system, git-workflow, java-code-style
+  5 rules: 0 always, 5 path-scoped, 0 listed
+```
+
+Press Ctrl+O to expand it. The expanded form shows one line per rule with its mode and glob scope, grouped by source directory:
+
+```
+[Claude rules]
+  5 rules: 0 always, 5 path-scoped, 0 listed
+  .claude/rules
+    api-versioning   on match  connect-backend/src/main/**/*.java
+    authorization    on match  connect-backend/src/**/*.java
+    design-system    on match  connect-portal/src/**/*.scss
+    git-workflow     on match  **
+    java-code-style  on match  {connect-backend,panel-event-processor}/src/main/**/*.java
+```
+
+The block is a TUI-only session entry. It is stored in the session file so it survives a resume, and it is never sent to the model.
 
 Run `/claude-rules` to see what was found.
 
@@ -76,7 +97,13 @@ Every rule ends up in one of three modes.
 
 On each `read`, `write`, or `edit` call, the extension resolves the `path` argument against the working directory and checks it against every scoped rule. Bash commands are checked too. Any token in the command that names an existing file is matched.
 
-A matching rule is sent to the agent as a custom message with `deliverAs: "steer"`. Pi delivers it after the current batch of tool calls and before the next model call. The message shows up in the transcript as one line. Expand it to see the full rule.
+A matching rule is sent to the agent as a hidden custom message with `deliverAs: "steer"`. Pi delivers it after the current batch of tool calls and before the next model call. In the transcript you see a TUI-only line instead:
+
+```
+[Claude rules] activated api-versioning, authorization, error-handling
+```
+
+Expand it with Ctrl+O to see the file that triggered it and the glob of each rule. Use `/claude-rules <name>` to read the full rule text.
 
 **Each rule is injected at most once per session.** The extension remembers which rules it injected. It rebuilds that memory from the session file on resume, so a resumed session does not repeat rules that are already in context. `/claude-rules-reload` clears the memory on purpose.
 
@@ -101,7 +128,7 @@ Rules with identical bodies are merged and the first one wins. This matters when
 |---|---|
 | `/claude-rules` | List every discovered rule with its mode, globs, and path. Rules that were already injected are marked with `*`. |
 | `/claude-rules <name>` | Show one rule in full, including its activation status. |
-| `/claude-rules-reload` | Rescan the rule directories and forget which rules were injected. |
+| `/claude-rules-reload` | Rescan the rule directories, forget which rules were injected, and print a fresh `[Claude rules]` block. |
 
 ## Configuration
 
@@ -115,6 +142,7 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
   "tools": ["read", "write", "edit"],
   "bashActivation": true,
   "activation": "message",
+  "startupSummary": "compact",
   "notify": true,
   "enabled": true
 }
@@ -128,7 +156,8 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 | `tools` | `["read", "write", "edit"]` | Tool names whose `path` argument triggers activation. Add `grep`, `find`, or `ls` if you want directory arguments to count. |
 | `bashActivation` | `true` | Scan bash commands for existing file paths and activate matching rules. |
 | `activation` | `"message"` | `"message"` injects the rule as a steering message. `"toolResult"` appends the rule to the result of the tool call that triggered it. |
-| `notify` | `true` | Show a notification on startup and on each activation. |
+| `startupSummary` | `"compact"` | How the `[Claude rules]` block renders at startup. `"compact"` shows the names and counts and expands with Ctrl+O. `"full"` always shows the expanded list. `"off"` shows no block. |
+| `notify` | `true` | Show a transient startup notification with the rule counts. Only used when `startupSummary` is `"off"`, since the block already carries that information. |
 | `enabled` | `true` | Set to `false` to turn the extension off for a project. |
 
 ## How this differs from Claude Code
