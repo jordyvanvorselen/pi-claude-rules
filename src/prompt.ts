@@ -4,7 +4,7 @@ import type { Rule } from "./rules.ts";
 export const SECTION_HEADING = "## Project rules";
 
 export function isInlined(rule: Rule, settings: Settings): boolean {
-	return settings.ruleLoading === "eager" || rule.mode === "always" || (rule.mode === "unscoped" && settings.unscopedRules === "inject");
+	return settings.ruleLoading === "eager" || (settings.ruleLoading === "hybrid" && rule.mode === "unscoped") || rule.mode === "always" || (rule.mode === "unscoped" && settings.unscopedRules === "inject");
 }
 
 export function scopeLabel(rule: Rule): string {
@@ -47,7 +47,9 @@ export function renderSection(rules: readonly Rule[], settings: Settings): strin
 	const listed = rules.filter((rule) => !isInlined(rule, settings));
 	const parts: string[] = [SECTION_HEADING, ""];
 	parts.push(
-		"This project ships rule files (Claude Code style). Path-scoped rules are injected into the conversation automatically when you read, write, or edit a matching path. When you plan work inside a rule's scope, read the rule file first.",
+		settings.ruleLoading === "hybrid"
+			? "This project ships rule files (Claude Code style). Unscoped and always-apply rules are loaded globally. When a read touches a matching path, its scoped rules are included in the read result before the next response; mutations are blocked until those rules have been received."
+			: "This project ships rule files (Claude Code style). Path-scoped rules are injected into the conversation automatically when you read, write, or edit a matching path. When you plan work inside a rule's scope, read the rule file first.",
 	);
 	if (inlined.length > 0) {
 		parts.push("", "### Rules that always apply", "");

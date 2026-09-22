@@ -2,7 +2,7 @@
 
 Load Claude Code rules from `.claude/rules/` into [pi](https://github.com/earendil-works/pi-coding-agent).
 
-Pi only reads `AGENTS.md` and `CLAUDE.md`. Teams that deploy scoped instructions with APM or Claude Code into `.claude/rules/*.md` get nothing from them in pi. This extension fixes that. By default it eagerly loads every discovered rule body into the system prompt before the first model/tool call, which is the safe Claude-compatible behavior.
+Pi only reads `AGENTS.md` and `CLAUDE.md`. Teams that deploy scoped instructions with APM or Claude Code into `.claude/rules/*.md` get nothing from them in pi. This extension fixes that. By default it uses a smart hybrid: global rules are loaded before the first request, reads load matching scoped rules into their result, and mutations are blocked until those rules have reached the model.
 
 ## Quick start
 
@@ -90,20 +90,21 @@ Every rule ends up in one of three modes.
 | Mode | When | What happens |
 |---|---|---|
 | always | `alwaysApply: true` | The full body is inlined in the system prompt on every turn. |
-| path-scoped | The rule has globs | Eager mode includes its body up front; `onMatch` mode injects it after a matching path is touched. |
-| unscoped | No globs and not always-apply | Eager mode includes its body up front; `onMatch` uses `unscopedRules` to list or inline it. |
+| path-scoped | The rule has globs | Hybrid loads it through matching read results and blocks mutations until loaded; eager includes it up front; `onMatch` injects it post-tool. |
+| unscoped | No globs and not always-apply | Hybrid and eager include it globally; `onMatch` uses `unscopedRules` to list or inline it. |
 
-### How path-scoped injection works (`onMatch` mode)
+### How path-scoped loading works
 
-On each `read`, `write`, or `edit` call, the extension resolves the `path` argument against the working directory and checks it against every scoped rule. Bash commands are checked too. Any token in the command that names an existing file is matched.
+On each configured path tool, the extension resolves the target against the working directory and checks it against every scoped rule. In hybrid mode, a matching `read` is allowed and its result receives the full rule bodies, even when the read itself fails. A matching `write` or `edit` is blocked before execution with the full rule bodies and a retry instruction; the retry is allowed after the result reaches the next model context. Reads and edits emitted in one assistant tool batch are therefore safe: the edit is blocked because the read has not crossed the context boundary yet.
 
-A matching rule is sent to the agent as a hidden custom message with `deliverAs: "steer"`. Pi delivers it after the current batch of tool calls and before the next model call. In the transcript you see a TUI-only line instead:
+In `onMatch` mode, matching bodies are injected after the tool call instead and are not pre-tool equivalent. Eager mode puts all bodies in the system prompt. Activation entries remain TUI-only:
 
 ```
-[Claude rules] activated api-versioning, authorization, error-handling
+[Claude rules] loaded via read api-versioning
+[Claude rules] blocked before edit api-versioning
 ```
 
-Expand it with Ctrl+O to see the file that triggered it and the glob of each rule. Use `/claude-rules <name>` to read the full rule text.
+Expand entries with Ctrl+O to see paths and globs. Use `/claude-rules <name>` to read the full rule text.
 
 **Each rule is injected at most once while its model-visible message remains in active context.** Pi's compaction-aware session projection is used on resume and after `/compact`; rules omitted by compaction can be injected again. `/claude-rules-reload` rescans and clears activation state.
 
@@ -136,7 +137,7 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 {
   "directories": ["docs/rules", "~/team-rules"],
   "cursorRules": false,
-  "ruleLoading": "eager",
+  "ruleLoading": "hybrid",
   "unscopedRules": "list",
   "tools": ["read", "write", "edit"],
   "bashActivation": true,
@@ -151,8 +152,8 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 |---|---|---|
 | `directories` | `[]` | Extra rule directories. Relative paths resolve against the working directory. `~` is expanded. Both `.md` and `.mdc` files are read. |
 | `cursorRules` | `false` | Also load `.cursor/rules/*.mdc`. |
-| `ruleLoading` | `"eager"` | `"eager"` inlines every rule body before the first tool call (safe Claude-compatible default). `"onMatch"` injects scoped rules after matching tool paths; it is not pre-tool equivalent. |
-| `unscopedRules` | `"list"` | Used in `onMatch` mode. `"list"` shows unscoped rules; `"inject"` inlines them. Eager mode always loads all bodies. |
+| `ruleLoading` | `"hybrid"` | `"hybrid"` loads unscoped/always rules globally, adds scoped rules to matching read results, and blocks unprepared writes/edits. `"eager"` inlines every body before tools. `"onMatch"` injects after matching tool paths and is the least safe/post-tool mode. |
+| `unscopedRules` | `"list"` | Used in `onMatch` mode. `"list"` shows unscoped rules; `"inject"` inlines them. Hybrid and eager modes always load unscoped bodies globally. |
 | `tools` | `["read", "write", "edit"]` | Tool names whose `path` argument triggers activation. Add `grep`, `find`, or `ls` if you want directory arguments to count. |
 | `bashActivation` | `false` | Optional extension: scan bash commands for existing file paths. Enable it for `onMatch` mode if desired (including extensionless `Dockerfile` and `Makefile`). |
 | `activation` | `"message"` | `"message"` injects the rule as a steering message. `"toolResult"` appends the rule to the result of the tool call that triggered it. |
@@ -162,7 +163,7 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 
 ## How this differs from Claude Code
 
-Eager loading is the default because Pi cannot make a path-targeted rule available before the first tool execution. It guarantees all scoped and unscoped instructions are available up front, at the cost of context. `onMatch` is an explicit context-saving migration option, but scoped bodies arrive after a matching tool call. Bash activation is an optional extension and is off by default.
+Hybrid is the default token-saving mode. It is not fully transparent like native Claude Code: a direct edit/write incurs one blocked retry, while a read followed by the next response can proceed without that round trip. Eager remains available when all bodies must be present before tools; `onMatch` is an explicit efficient but post-tool mode. Bash activation is optional and off by default; arbitrary shell target detection is intentionally incomplete.
 
 - Rules from parent directories are loaded, the same way pi loads `AGENTS.md` from parents. Claude Code only loads from the project root.
 - Cursor `.mdc` files and extra directories are supported. Claude Code ignores them.

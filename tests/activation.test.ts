@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { activateRules, pathsFromCommand, pathsFromToolCall, relativeToRoot, shellTokens } from "../src/activation.ts";
+import { activateRules, bashCommandKind, pathsFromCommand, pathsFromToolCall, relativeToRoot, shellTokens } from "../src/activation.ts";
 import { DEFAULT_SETTINGS, mergeSettings } from "../src/config.ts";
 import { parseRule, type RuleSource } from "../src/rules.ts";
 
@@ -15,6 +15,14 @@ const unscoped = parseRule("/repo/.claude/rules/free.md", "Free", source);
 describe("shellTokens", () => {
 	it("splits on whitespace and honours quotes", () => {
 		assert.deepEqual(shellTokens(`cat "a b/c.txt" 'd.txt' e.txt`), ["cat", "a b/c.txt", "d.txt", "e.txt"]);
+	});
+});
+
+describe("bashCommandKind", () => {
+	it("classifies reads and treats redirection as mutation", () => {
+		assert.equal(bashCommandKind("cat src/a.ts"), "read");
+		assert.equal(bashCommandKind("cat src/a.ts > out.txt"), "mutate");
+		assert.equal(bashCommandKind("unknown-command src/a.ts"), "unknown");
 	});
 });
 

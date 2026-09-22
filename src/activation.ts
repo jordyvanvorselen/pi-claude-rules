@@ -6,6 +6,7 @@ import type { Rule } from "./rules.ts";
 
 const PATH_FIELDS = ["path", "file_path", "filePath", "file"] as const;
 const BASH_TOOLS = new Set(["bash", "powershell"]);
+const READ_ONLY_COMMANDS = new Set(["cat", "head", "tail", "sed", "awk", "grep", "rg", "find", "ls", "stat", "file", "pwd", "git"]);
 
 export function isDirectory(path: string): boolean {
 	try {
@@ -33,6 +34,22 @@ export function shellTokens(command: string): string[] {
 		tokens.push(token.replace(/\\(.)/g, "$1"));
 	}
 	return tokens;
+}
+
+export type BashCommandKind = "read" | "mutate" | "unknown";
+
+/** Conservative classification only; this is not a shell parser. */
+export function bashCommandKind(command: string): BashCommandKind {
+	const first = shellTokens(command)[0]?.toLowerCase();
+	if (!first) return "unknown";
+	if (/[>]|\b(?:tee|mv|cp|rm|mkdir|touch|chmod|chown|truncate|perl|python|node)\b/.test(command)) return "mutate";
+	if (first === "sed" && /\s-[^\s]*i/.test(command)) return "mutate";
+	if (first === "git") {
+		const subcommand = shellTokens(command)[1]?.toLowerCase();
+		return subcommand && new Set(["show", "diff", "status", "log", "grep", "ls-files"]).has(subcommand) ? "read" : "mutate";
+	}
+	if (READ_ONLY_COMMANDS.has(first)) return "read";
+	return "unknown";
 }
 
 export function pathsFromCommand(command: string, cwd: string): string[] {

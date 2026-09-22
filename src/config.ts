@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 export type UnscopedMode = "list" | "inject";
-export type RuleLoading = "eager" | "onMatch";
+export type RuleLoading = "hybrid" | "eager" | "onMatch";
 export type ActivationMode = "message" | "toolResult";
 export type StartupSummary = "compact" | "full" | "off";
 
@@ -25,7 +25,7 @@ export const SETTINGS_FILE = "claude-rules.json";
 export const DEFAULT_SETTINGS: Settings = {
 	directories: [],
 	cursorRules: false,
-	ruleLoading: "eager",
+	ruleLoading: "hybrid",
 	unscopedRules: "list",
 	tools: ["read", "write", "edit"],
 	bashActivation: false,
@@ -65,7 +65,7 @@ export function mergeSettings(...layers: Partial<Settings>[]): Settings {
 	for (const layer of layers) {
 		if (Array.isArray(layer.directories)) merged.directories = [...merged.directories, ...layer.directories.filter((d) => typeof d === "string")];
 		if (typeof layer.cursorRules === "boolean") merged.cursorRules = layer.cursorRules;
-		if (layer.ruleLoading === "eager" || layer.ruleLoading === "onMatch") merged.ruleLoading = layer.ruleLoading;
+		if (layer.ruleLoading === "hybrid" || layer.ruleLoading === "eager" || layer.ruleLoading === "onMatch") merged.ruleLoading = layer.ruleLoading;
 		if (layer.unscopedRules === "list" || layer.unscopedRules === "inject") merged.unscopedRules = layer.unscopedRules;
 		if (Array.isArray(layer.tools)) merged.tools = layer.tools.filter((t) => typeof t === "string");
 		if (typeof layer.bashActivation === "boolean") merged.bashActivation = layer.bashActivation;

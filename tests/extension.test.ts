@@ -29,7 +29,7 @@ const fakeTheme = {
 	},
 };
 
-function harness(cwd: string, branch: unknown[] = [], hasUI = true) {
+function harness(cwd: string, branch: unknown[] = [], hasUI = true, projection?: () => unknown) {
 	const handlers: Record<string, Handler[]> = {};
 	const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
 	const sent: SentMessage[] = [];
@@ -54,7 +54,7 @@ function harness(cwd: string, branch: unknown[] = [], hasUI = true) {
 		cwd,
 		hasUI,
 		ui: { notify: (m: string) => notices.push(m) },
-		sessionManager: { getBranch: () => branch },
+		sessionManager: { getBranch: () => branch, ...(projection ? { buildSessionProjection: projection } : {}) },
 	};
 	ext(pi as never);
 	const fire = async (e: string, ev: object) => {
@@ -102,17 +102,84 @@ describe("extension wiring", () => {
 		assert.ok(!prompt.includes("Unscoped body."), "unscoped rules are listed, not inlined, by default");
 	});
 
-	it("uses eager loading by default before the first tool call", async () => {
+	it("uses hybrid loading by default and makes a read available before the next edit", async () => {
 		rmSync(join(root, ".pi", "claude-rules.json"));
 		try {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
 			const result = await h.fire("before_agent_start", { systemPrompt: "BASE", prompt: "hi" });
 			const prompt = String(result?.systemPrompt);
-			assert.match(prompt, /Use records\./);
+			assert.ok(!prompt.includes("Use records."), "scoped bodies are not globally eager");
 			assert.match(prompt, /Unscoped body\./);
-			await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
-			assert.equal(h.sent.length, 0, "eager loading does not queue a tool-call message");
+			await h.call("read", { path: "backend/src/main/A.java" }, "read-1");
+			const patched = await h.fire("tool_result", { type: "tool_result", toolName: "read", toolCallId: "read-1", content: [{ type: "text", text: "file" }], isError: false });
+			assert.match(JSON.stringify(patched?.content), /Use records\./);
+			await h.fire("context", { type: "context", messages: [] });
+			const edit = await h.call("edit", { path: "backend/src/main/A.java", edits: [] }, "edit-1");
+			assert.equal(edit, undefined, "the edit is allowed after the read result crossed context");
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
+	});
+
+	it("blocks a direct mutation with the full missing rule", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		try {
+			const h = harness(root);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			const blocked = await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
+			assert.equal(blocked?.block, true);
+			assert.match(String(blocked?.reason), /Use records\./);
+			assert.match(String(blocked?.reason), /retry/i);
+			assert.equal(h.sent.length, 0);
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
+	});
+
+	it("blocks a same-batch edit even when a read came first", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		try {
+			const h = harness(root);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			await h.call("read", { path: "backend/src/main/A.java" }, "read-batch");
+			const blocked = await h.call("edit", { path: "backend/src/main/A.java", edits: [] }, "edit-batch");
+			assert.equal(blocked?.block, true);
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
+	});
+
+	it("loads rules even when the read itself fails", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		try {
+			const h = harness(root);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			await h.call("read", { path: "backend/src/main/NotYetCreated.java" }, "read-failed");
+			const patched = await h.fire("tool_result", { type: "tool_result", toolName: "read", toolCallId: "read-failed", content: [{ type: "text", text: "missing" }], isError: true });
+			assert.match(JSON.stringify(patched?.content), /Use records\./);
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
+	});
+
+	it("forgets scoped rules after compaction removes their result", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		let visible = true;
+		try {
+			const h = harness(root, [], true, () => ({
+				entries: visible
+					? [{ sourceEntry: { type: "custom_message", customType: CUSTOM_TYPE, details: { ruleId: ".claude/rules/java.md" } }, messages: [{ role: "toolResult", content: [{ type: "text", text: "Use records." }] }] }]
+					: [],
+			}));
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			await h.fire("session_compact", { type: "session_compact" });
+			const active = await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
+			assert.equal(active, undefined);
+			visible = false;
+			await h.fire("session_compact", { type: "session_compact" });
+			const blocked = await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
+			assert.equal(blocked?.block, true);
 		} finally {
 			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
 		}

@@ -1,7 +1,7 @@
 {
   "name": "pi-claude-rules",
   "version": "0.1.0",
-  "description": "Load Claude Code rules from .claude/rules into pi: list them in the system prompt, inline always-apply rules, and inject path-scoped rules when the agent touches matching files.",
+  "description": "Load Claude Code rules from .claude/rules into pi with hybrid read-before-mutation safety, eager loading, and post-tool compatibility modes.",
   "type": "module",
   "license": "MIT",
   "author": "Jordy van Vorselen",
