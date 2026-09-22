@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Settings } from "./config.ts";
 import { matchesAnyGlob } from "./glob.ts";
@@ -6,8 +6,16 @@ import type { Rule } from "./rules.ts";
 
 const PATH_FIELDS = ["path", "file_path", "filePath", "file"] as const;
 const BASH_TOOLS = new Set(["bash", "powershell"]);
-const CREATING_TOOLS = new Set(["write"]);
 
+export function isDirectory(path: string): boolean {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+/** Compatibility helper; activation intentionally does not require a file to exist. */
 export function isFile(path: string): boolean {
 	try {
 		return statSync(path).isFile();
@@ -32,10 +40,11 @@ export function pathsFromCommand(command: string, cwd: string): string[] {
 	for (const raw of shellTokens(command)) {
 		const token = raw.replace(/^[<>|&;(]+/, "").replace(/[<>|&;),:]+$/, "");
 		if (!token || token.startsWith("-") || token.startsWith("$")) continue;
-		if (!token.includes("/") && !/\.[A-Za-z0-9]+$/.test(token)) continue;
 		if (/^[a-z]+:\/\//i.test(token)) continue;
 		const absolute = resolve(cwd, token.startsWith("~/") ? token.replace(/^~/, process.env.HOME ?? "") : token);
-		if (isFile(absolute)) found.push(absolute);
+		// Do not claim to parse shell syntax. We conservatively inspect existing
+		// files, including extensionless Dockerfile/Makefile-style paths.
+		if (existsSync(absolute) && !isDirectory(absolute)) found.push(absolute);
 	}
 	return [...new Set(found)];
 }
@@ -54,11 +63,12 @@ export function pathsFromToolCall(toolName: string, input: unknown, cwd: string,
 		const value = record[field];
 		if (typeof value === "string" && value.trim()) paths.push(resolve(cwd, value.trim().replace(/^@/, "")));
 		if (Array.isArray(value)) {
-			for (const item of value) if (typeof item === "string" && item.trim()) paths.push(resolve(cwd, item.trim()));
+			for (const item of value) if (typeof item === "string" && item.trim()) paths.push(resolve(cwd, item.trim().replace(/^@/, "")));
 		}
 	}
-	const existing = CREATING_TOOLS.has(toolName) ? paths : paths.filter(isFile);
-	return [...new Set(existing)];
+	// read/edit may be aimed at a file that the model is about to create. Keep
+	// prospective paths, but never activate a directory when it is knowable.
+	return [...new Set(paths.filter((path) => !isDirectory(path)))];
 }
 
 export function relativeToRoot(absolutePath: string, root: string): string | undefined {

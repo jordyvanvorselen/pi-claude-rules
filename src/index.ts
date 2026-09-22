@@ -57,8 +57,27 @@ function ownEntries(ctx: ExtensionContext): LooseEntry[] {
 	return found;
 }
 
-function injectedFromSession(ctx: ExtensionContext): Set<string> {
+function injectedFromSession(ctx: ExtensionContext, rules: readonly Rule[] = []): Set<string> {
 	const ids = new Set<string>();
+	const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & {
+		buildSessionProjection?: () => { entries: { sourceEntry: { type?: string; customType?: string; details?: unknown } }[] };
+	};
+	// Projection is compaction-aware: custom messages omitted by a compaction
+	// are eligible for reinjection. Older Pi versions lack this API, so retain
+	// the branch-based fallback for compatibility.
+	if (typeof manager.buildSessionProjection === "function") {
+		for (const projected of manager.buildSessionProjection().entries) {
+			const entry = projected.sourceEntry;
+			if (entry.type === "custom_message" && entry.customType === CUSTOM_TYPE) {
+				const details = entry.details;
+				if (details && typeof details === "object" && "ruleId" in details && typeof details.ruleId === "string") ids.add(details.ruleId);
+			}
+			// toolResult activation stores the body in a tool-result message.
+			const text = JSON.stringify(projected.messages);
+			for (const rule of rules) if (text.includes(rule.body)) ids.add(rule.id);
+		}
+		return ids;
+	}
 	for (const data of ownEntries(ctx)) {
 		if (data.ruleId) ids.add(data.ruleId);
 		for (const rule of data.rules ?? []) if (rule.ruleId) ids.add(rule.ruleId);
@@ -68,6 +87,15 @@ function injectedFromSession(ctx: ExtensionContext): Set<string> {
 
 function hasSummaryEntry(ctx: ExtensionContext): boolean {
 	return ownEntries(ctx).some((data) => data.kind === "summary");
+}
+
+function activationIdsFromEntries(ctx: ExtensionContext): Set<string> {
+	const ids = new Set<string>();
+	for (const data of ownEntries(ctx)) {
+		if (data.ruleId) ids.add(data.ruleId);
+		for (const rule of data.rules ?? []) if (rule.ruleId) ids.add(rule.ruleId);
+	}
+	return ids;
 }
 
 function activatedRule(activation: Activation): ActivatedRule {
@@ -88,7 +116,10 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 
 	const reload = (ctx: ExtensionContext) => {
 		state = freshState(ctx.cwd);
-		state.injected = injectedFromSession(ctx);
+		state.injected = injectedFromSession(ctx, state.rules);
+		if (state.settings.ruleLoading === "eager") {
+			for (const id of activationIdsFromEntries(ctx)) state.injected.add(id);
+		}
 	};
 
 	const summary = () => buildSummary(state.rules, state.settings);
@@ -125,7 +156,7 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		if (state.settings.notify) ctx.ui.notify(`claude-rules: ${countsLine(summary())}`, "info");
 	});
 
-	pi.on("before_agent_start", async (event) => {
+	pi.on("before_agent_start", async (event, ctx) => {
 		if (!state.settings.enabled || state.rules.length === 0) return;
 		const section = renderSection(state.rules, state.settings);
 		if (!section) return;
@@ -140,7 +171,10 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		if (fresh.length === 0) return;
 		for (const activation of fresh) state.injected.add(activation.rule.id);
 
+		// Eager mode already put every body in the system prompt. Keep this
+		// optional activation marker TUI-only, but never send a duplicate body.
 		pi.appendEntry<EntryData>(CUSTOM_TYPE, activationEntry(fresh));
+		if (state.settings.ruleLoading === "eager") return;
 
 		if (state.settings.activation === "toolResult") {
 			state.pending.set(event.toolCallId, fresh);
@@ -152,6 +186,10 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 				{ deliverAs: "steer", triggerTurn: false },
 			);
 		}
+	});
+
+	pi.on("session_compact", async (_event, ctx) => {
+		if (state.settings.ruleLoading === "onMatch") state.injected = injectedFromSession(ctx, state.rules);
 	});
 
 	pi.on("tool_result", async (event) => {

@@ -2,7 +2,7 @@
 
 Load Claude Code rules from `.claude/rules/` into [pi](https://github.com/earendil-works/pi-coding-agent).
 
-Pi only reads `AGENTS.md` and `CLAUDE.md`. Teams that deploy scoped instructions with APM or Claude Code into `.claude/rules/*.md` get nothing from them in pi. This extension fixes that. It lists every rule in the system prompt, inlines the rules marked always-apply, and injects a path-scoped rule into the conversation the first time the agent reads, writes, or edits a file that matches its globs.
+Pi only reads `AGENTS.md` and `CLAUDE.md`. Teams that deploy scoped instructions with APM or Claude Code into `.claude/rules/*.md` get nothing from them in pi. This extension fixes that. By default it eagerly loads every discovered rule body into the system prompt before the first model/tool call, which is the safe Claude-compatible behavior.
 
 ## Quick start
 
@@ -90,10 +90,10 @@ Every rule ends up in one of three modes.
 | Mode | When | What happens |
 |---|---|---|
 | always | `alwaysApply: true` | The full body is inlined in the system prompt on every turn. |
-| path-scoped | The rule has globs | The rule is listed in the system prompt with its globs. The full body is injected into the conversation the first time a tool call touches a matching file. |
-| unscoped | No globs and not always-apply | The rule is listed in the system prompt with its description. The agent reads it on demand. Set `unscopedRules` to `inject` to inline these too. |
+| path-scoped | The rule has globs | Eager mode includes its body up front; `onMatch` mode injects it after a matching path is touched. |
+| unscoped | No globs and not always-apply | Eager mode includes its body up front; `onMatch` uses `unscopedRules` to list or inline it. |
 
-### How path-scoped injection works
+### How path-scoped injection works (`onMatch` mode)
 
 On each `read`, `write`, or `edit` call, the extension resolves the `path` argument against the working directory and checks it against every scoped rule. Bash commands are checked too. Any token in the command that names an existing file is matched.
 
@@ -105,9 +105,7 @@ A matching rule is sent to the agent as a hidden custom message with `deliverAs:
 
 Expand it with Ctrl+O to see the file that triggered it and the glob of each rule. Use `/claude-rules <name>` to read the full rule text.
 
-**Each rule is injected at most once per session.** The extension remembers which rules it injected. It rebuilds that memory from the session file on resume, so a resumed session does not repeat rules that are already in context. `/claude-rules-reload` clears the memory on purpose.
-
-Rules are not re-injected after `/compact`. Run `/claude-rules-reload` if you want them to come back when the agent next touches a matching file.
+**Each rule is injected at most once while its model-visible message remains in active context.** Pi's compaction-aware session projection is used on resume and after `/compact`; rules omitted by compaction can be injected again. `/claude-rules-reload` rescans and clears activation state.
 
 ## Where rules are loaded from
 
@@ -120,7 +118,7 @@ In this order:
 
 Subdirectories are scanned recursively. Only `.md` files are read, plus `.mdc` for Cursor directories.
 
-Rules with identical bodies are merged and the first one wins. This matters when APM deploys the same source to both `.claude/rules/` and `.cursor/rules/`. If the Claude copy has no `description` and the Cursor copy does, the description is borrowed.
+Identical deployed copies at the same logical path are merged (the `.claude` identity wins) while scopes and metadata are unioned. Distinct authored files are never merged merely because their bodies are identical.
 
 ## Slash commands
 
@@ -138,6 +136,7 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 {
   "directories": ["docs/rules", "~/team-rules"],
   "cursorRules": false,
+  "ruleLoading": "eager",
   "unscopedRules": "list",
   "tools": ["read", "write", "edit"],
   "bashActivation": true,
@@ -152,9 +151,10 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 |---|---|---|
 | `directories` | `[]` | Extra rule directories. Relative paths resolve against the working directory. `~` is expanded. Both `.md` and `.mdc` files are read. |
 | `cursorRules` | `false` | Also load `.cursor/rules/*.mdc`. |
-| `unscopedRules` | `"list"` | `"list"` shows unscoped rules in the system prompt listing. `"inject"` inlines their full body like always-apply rules. |
+| `ruleLoading` | `"eager"` | `"eager"` inlines every rule body before the first tool call (safe Claude-compatible default). `"onMatch"` injects scoped rules after matching tool paths; it is not pre-tool equivalent. |
+| `unscopedRules` | `"list"` | Used in `onMatch` mode. `"list"` shows unscoped rules; `"inject"` inlines them. Eager mode always loads all bodies. |
 | `tools` | `["read", "write", "edit"]` | Tool names whose `path` argument triggers activation. Add `grep`, `find`, or `ls` if you want directory arguments to count. |
-| `bashActivation` | `true` | Scan bash commands for existing file paths and activate matching rules. |
+| `bashActivation` | `false` | Optional extension: scan bash commands for existing file paths. Enable it for `onMatch` mode if desired (including extensionless `Dockerfile` and `Makefile`). |
 | `activation` | `"message"` | `"message"` injects the rule as a steering message. `"toolResult"` appends the rule to the result of the tool call that triggered it. |
 | `startupSummary` | `"compact"` | How the `[Claude rules]` block renders at startup. `"compact"` shows the names and counts and expands with Ctrl+O. `"full"` always shows the expanded list. `"off"` shows no block. |
 | `notify` | `true` | Show a transient startup notification with the rule counts. Only used when `startupSummary` is `"off"`, since the block already carries that information. |
@@ -162,11 +162,8 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 
 ## How this differs from Claude Code
 
-Claude Code loads path-scoped rules when Claude reads or edits a matching file, and unscoped rules on every session. This extension mirrors that, with a few differences you should know about.
+Eager loading is the default because Pi cannot make a path-targeted rule available before the first tool execution. It guarantees all scoped and unscoped instructions are available up front, at the cost of context. `onMatch` is an explicit context-saving migration option, but scoped bodies arrive after a matching tool call. Bash activation is an optional extension and is off by default.
 
-- Unscoped rules are listed, not inlined, by default. Claude Code inlines them. Set `unscopedRules` to `inject` to match Claude Code. The default keeps the system prompt small for projects that deploy many rules.
-- Injection happens once per session per rule. Claude Code manages rule context internally and may present rules differently after compaction.
-- Bash commands can activate rules. Claude Code only activates on its file tools. Turn off `bashActivation` if you prefer the stricter behaviour.
 - Rules from parent directories are loaded, the same way pi loads `AGENTS.md` from parents. Claude Code only loads from the project root.
 - Cursor `.mdc` files and extra directories are supported. Claude Code ignores them.
 - Symlinked files and directories inside a rules directory are followed. Loops are skipped.

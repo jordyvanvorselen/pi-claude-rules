@@ -1,5 +1,5 @@
 import type { Settings } from "./config.ts";
-import { isInlined, scopeLabel } from "./prompt.ts";
+import { scopeLabel } from "./prompt.ts";
 import type { Rule } from "./rules.ts";
 
 export type ModeLabel = "always" | "on match" | "listed";
@@ -36,8 +36,11 @@ export interface Paint {
 export const PLAIN: Paint = { heading: (t) => t, accent: (t) => t, dim: (t) => t };
 
 export function modeLabel(rule: Rule, settings: Settings): ModeLabel {
-	if (isInlined(rule, settings)) return "always";
-	return rule.mode === "scoped" ? "on match" : "listed";
+	// Keep source semantics visible in the TUI even when eager mode has loaded
+	// the body already; scope metadata remains useful for deciding applicability.
+	if (rule.mode === "always") return "always";
+	if (rule.mode === "scoped") return "on match";
+	return "listed";
 }
 
 function sourceOf(rule: Rule): string {

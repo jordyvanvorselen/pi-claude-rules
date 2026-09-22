@@ -73,7 +73,8 @@ export function normalizeFrontmatter(frontmatter: Frontmatter, body: string, nam
 }
 
 export function parseRule(file: string, content: string, source: RuleSource): Rule {
-	const { frontmatter, body } = parseRuleFile(content);
+	const parsed = parseRuleFile(content);
+	const { frontmatter, body } = parsed;
 	const relPath = relative(source.dir, file).split("\\").join("/");
 	const name = basename(file, extname(file));
 	const normalized = normalizeFrontmatter(frontmatter, body, name);
@@ -86,6 +87,7 @@ export function parseRule(file: string, content: string, source: RuleSource): Ru
 		root: source.root,
 		body,
 		...normalized,
+		warnings: [...parsed.warnings, ...normalized.warnings],
 	};
 }
 
@@ -135,25 +137,36 @@ export function loadRulesFromSource(source: RuleSource): Rule[] {
 	return walk(source.dir, source.extensions).map((file) => parseRule(file, readFileSync(file, "utf8"), source));
 }
 
+function logicalDeploymentPath(rule: Rule): string {
+	const rel = relative(rule.sourceDir, rule.file).split("\\").join("/");
+	return rel.replace(/\.(?:md|mdc)$/i, "");
+}
+
+function isDeployedCopy(a: Rule, b: Rule): boolean {
+	if (a.body.trim() !== b.body.trim() || a.root !== b.root || logicalDeploymentPath(a) !== logicalDeploymentPath(b)) return false;
+	return [a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.claude/rules")) && [a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.cursor/rules"));
+}
+
 export function dedupeRules(rules: Rule[]): Rule[] {
-	const seen = new Map<string, Rule>();
+	const result: Rule[] = [];
 	for (const rule of rules) {
-		const key = rule.body.trim();
-		const existing = seen.get(key);
+		const existing = result.find((candidate) => isDeployedCopy(candidate, rule));
 		if (!existing) {
-			seen.set(key, rule);
+			result.push(rule);
 			continue;
 		}
-		if (!existing.description && rule.description) {
-			existing.description = rule.description;
-			existing.title = rule.description;
+		const kept = existing.sourceDir.endsWith("/.claude/rules") || !rule.sourceDir.endsWith("/.claude/rules") ? existing : rule;
+		if (kept !== existing) result[result.indexOf(existing)] = kept;
+		kept.globs = [...new Set([...existing.globs, ...rule.globs])];
+		if (kept.mode !== "always") kept.mode = rule.mode === "always" ? "always" : kept.globs.length > 0 ? "scoped" : "unscoped";
+		const description = existing.description ?? rule.description;
+		if (description) {
+			kept.description = description;
+			kept.title = description;
 		}
-		if (existing.globs.length === 0 && rule.globs.length > 0 && existing.mode !== "always") {
-			existing.globs = rule.globs;
-			existing.mode = "scoped";
-		}
+		kept.warnings = [...new Set([...existing.warnings, ...rule.warnings])];
 	}
-	return [...seen.values()];
+	return result;
 }
 
 export function loadRules(sources: RuleSource[]): Rule[] {
