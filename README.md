@@ -9,7 +9,7 @@ Pi only reads `AGENTS.md` and `CLAUDE.md`. Teams that deploy scoped instructions
 Install the package:
 
 ```bash
-pi install git:github.com/jordyvanvorselen/pi-claude-rules
+pi install npm:@jordyvanvorselen/pi-claude-rules
 ```
 
 Or install from a local checkout:
@@ -21,7 +21,7 @@ pi install /path/to/pi-claude-rules
 Or try it for one run without installing:
 
 ```bash
-pi -e git:github.com/jordyvanvorselen/pi-claude-rules
+pi -e npm:@jordyvanvorselen/pi-claude-rules
 ```
 
 Put rule files in `.claude/rules/` in your project. Start pi. A `[Claude rules]` block appears under pi's own `[Skills]` and `[Extensions]` blocks:
