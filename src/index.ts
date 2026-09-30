@@ -230,7 +230,10 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 			const fresh = missing.filter((activation) => !pendingIds.has(activation.rule.id));
 			if (fresh.length > 0) state.pending.set(event.toolCallId, { activations: fresh, deliverInResult: false });
 			pi.appendEntry<EntryData>(CUSTOM_TYPE, activationEntry(missing, "blocked"));
-			return { block: true, reason: blockedReason(missing), terminate: true };
+			// Never terminate: the reason asks the model to retry, and pi stops the
+			// run when every result in a batch terminates, so a single blocked write
+			// would end a headless agent (a subagent) before it can retry.
+			return { block: true, reason: blockedReason(missing) };
 		}
 		if (mode === "hybrid") {
 			const bashRead = (event.toolName === "bash" || event.toolName === "powershell") && (() => {

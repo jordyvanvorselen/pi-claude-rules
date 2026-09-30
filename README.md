@@ -95,7 +95,7 @@ Every rule ends up in one of three modes.
 
 ### How path-scoped loading works
 
-On each configured path tool, the extension resolves the target against the working directory and checks it against every scoped rule. In hybrid mode, a matching `read` is allowed and its result receives the full rule bodies, even when the read itself fails. A matching `write` or `edit` is blocked before execution with the full rule bodies and a retry instruction; the retry is allowed after the result reaches the next model context. Reads and edits emitted in one assistant tool batch are therefore safe: the edit is blocked because the read has not crossed the context boundary yet.
+On each configured path tool, the extension resolves the target against the working directory and checks it against every scoped rule. In hybrid mode, a matching `read` is allowed and its result receives the full rule bodies, even when the read itself fails. A matching `write` or `edit` is blocked before execution with the full rule bodies and a retry instruction; the retry is allowed after the result reaches the next model context. The block never ends the run, so a headless agent such as a subagent gets the turn it needs to retry. Reads and edits emitted in one assistant tool batch are therefore safe: the edit is blocked because the read has not crossed the context boundary yet.
 
 In `onMatch` mode, matching bodies are injected after the tool call instead and are not pre-tool equivalent. Eager mode puts all bodies in the system prompt. Activation entries remain TUI-only:
 

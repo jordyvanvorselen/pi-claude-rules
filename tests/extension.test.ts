@@ -137,6 +137,19 @@ describe("extension wiring", () => {
 		}
 	});
 
+	it("lets the agent retry a blocked mutation instead of ending the run", async () => {
+		rmSync(join(root, ".pi", "claude-rules.json"));
+		try {
+			const h = harness(root, [], false);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			const blocked = await h.call("write", { path: "backend/src/main/A.java", content: "" });
+			assert.equal(blocked?.block, true);
+			assert.notEqual(blocked?.terminate, true, "a blocked batch must not stop the run, or the retry never happens");
+		} finally {
+			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+		}
+	});
+
 	it("blocks a same-batch edit even when a read came first", async () => {
 		rmSync(join(root, ".pi", "claude-rules.json"));
 		try {
