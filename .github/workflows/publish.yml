@@ -1,7 +1,7 @@
 name: publish
 
 # Publishes when the version in package.json is not on npm yet.
-# Then creates a GitHub release and a v<version> tag when they do not exist yet.
+# Then creates a GitHub release and a <version> tag when they do not exist yet.
 # The ci workflow fails pull requests that do not bump the version.
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v$(jq -r .version package.json)"
+          TAG="$(jq -r .version package.json)"
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG already exists"
             exit 0
