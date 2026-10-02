@@ -6,7 +6,21 @@ import type { Rule } from "./rules.ts";
 
 const PATH_FIELDS = ["path", "file_path", "filePath", "file"] as const;
 const BASH_TOOLS = new Set(["bash", "powershell"]);
-const READ_ONLY_COMMANDS = new Set(["cat", "head", "tail", "sed", "awk", "grep", "rg", "find", "ls", "stat", "file", "pwd", "git"]);
+const READ_ONLY_COMMANDS = new Set([
+	"cat",
+	"head",
+	"tail",
+	"sed",
+	"awk",
+	"grep",
+	"rg",
+	"find",
+	"ls",
+	"stat",
+	"file",
+	"pwd",
+	"git",
+]);
 
 export function isDirectory(path: string): boolean {
 	try {
@@ -46,7 +60,9 @@ export function bashCommandKind(command: string): BashCommandKind {
 	if (first === "sed" && /\s-[^\s]*i/.test(command)) return "mutate";
 	if (first === "git") {
 		const subcommand = shellTokens(command)[1]?.toLowerCase();
-		return subcommand && new Set(["show", "diff", "status", "log", "grep", "ls-files"]).has(subcommand) ? "read" : "mutate";
+		return subcommand && new Set(["show", "diff", "status", "log", "grep", "ls-files"]).has(subcommand)
+			? "read"
+			: "mutate";
 	}
 	if (READ_ONLY_COMMANDS.has(first)) return "read";
 	return "unknown";
@@ -80,7 +96,8 @@ export function pathsFromToolCall(toolName: string, input: unknown, cwd: string,
 		const value = record[field];
 		if (typeof value === "string" && value.trim()) paths.push(resolve(cwd, value.trim().replace(/^@/, "")));
 		if (Array.isArray(value)) {
-			for (const item of value) if (typeof item === "string" && item.trim()) paths.push(resolve(cwd, item.trim().replace(/^@/, "")));
+			for (const item of value)
+				if (typeof item === "string" && item.trim()) paths.push(resolve(cwd, item.trim().replace(/^@/, "")));
 		}
 	}
 	// read/edit may be aimed at a file that the model is about to create. Keep

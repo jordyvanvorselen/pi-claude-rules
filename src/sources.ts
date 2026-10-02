@@ -44,9 +44,19 @@ export function buildSources(cwd: string, settings: Settings): RuleSource[] {
 	const home = homedir();
 	for (const root of ancestorsOf(cwd)) {
 		if (root === home) continue;
-		add({ dir: join(root, ".claude", "rules"), root, label: labelFor(join(root, ".claude", "rules"), cwd), extensions: MARKDOWN });
+		add({
+			dir: join(root, ".claude", "rules"),
+			root,
+			label: labelFor(join(root, ".claude", "rules"), cwd),
+			extensions: MARKDOWN,
+		});
 		if (settings.cursorRules) {
-			add({ dir: join(root, ".cursor", "rules"), root, label: labelFor(join(root, ".cursor", "rules"), cwd), extensions: CURSOR });
+			add({
+				dir: join(root, ".cursor", "rules"),
+				root,
+				label: labelFor(join(root, ".cursor", "rules"), cwd),
+				extensions: CURSOR,
+			});
 		}
 	}
 

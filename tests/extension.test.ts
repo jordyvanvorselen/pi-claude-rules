@@ -20,7 +20,11 @@ interface Entry {
 	data: { kind?: string; ruleId?: string; total?: number; rules?: { name: string }[] };
 }
 
-type Renderer = (entry: { customType: string; data: unknown }, options: { expanded: boolean }, theme: unknown) => { render: (width: number) => string[] } | undefined;
+type Renderer = (
+	entry: { customType: string; data: unknown },
+	options: { expanded: boolean },
+	theme: unknown,
+) => { render: (width: number) => string[] } | undefined;
 
 const fakeTheme = {
 	tag: "",
@@ -81,9 +85,18 @@ describe("extension wiring", () => {
 		mkdirSync(join(root, "backend", "src", "main"), { recursive: true });
 		mkdirSync(join(root, ".pi"), { recursive: true });
 		// Existing activation-focused cases opt into the efficient compatibility mode.
-		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
-		writeFileSync(join(root, ".claude", "rules", "java.md"), '---\npaths:\n  - "backend/src/main/**/*.java"\n---\n# Java rule\n\nUse records.');
-		writeFileSync(join(root, ".claude", "rules", "always.md"), "---\nalwaysApply: true\ndescription: Team basics\n---\nBe kind.");
+		writeFileSync(
+			join(root, ".pi", "claude-rules.json"),
+			JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+		);
+		writeFileSync(
+			join(root, ".claude", "rules", "java.md"),
+			'---\npaths:\n  - "backend/src/main/**/*.java"\n---\n# Java rule\n\nUse records.',
+		);
+		writeFileSync(
+			join(root, ".claude", "rules", "always.md"),
+			"---\nalwaysApply: true\ndescription: Team basics\n---\nBe kind.",
+		);
 		writeFileSync(join(root, ".claude", "rules", "free.md"), "# Free rule\n\nUnscoped body.");
 		writeFileSync(join(root, "backend", "src", "main", "A.java"), "class A {}");
 	});
@@ -97,7 +110,10 @@ describe("extension wiring", () => {
 		assert.ok(prompt.startsWith("BASE"));
 		assert.match(prompt, /## Project rules/);
 		assert.match(prompt, /#### Team basics \(\.claude\/rules\/always\.md\)\n\nBe kind\./);
-		assert.match(prompt, /- Java rule \(\.claude\/rules\/java\.md\)\. applies to: backend\/src\/main\/\*\*\/\*\.java\./);
+		assert.match(
+			prompt,
+			/- Java rule \(\.claude\/rules\/java\.md\)\. applies to: backend\/src\/main\/\*\*\/\*\.java\./,
+		);
 		assert.match(prompt, /- Free rule \(\.claude\/rules\/free\.md\)\. applies to any task\./);
 		assert.ok(!prompt.includes("Unscoped body."), "unscoped rules are listed, not inlined, by default");
 	});
@@ -112,13 +128,22 @@ describe("extension wiring", () => {
 			assert.ok(!prompt.includes("Use records."), "scoped bodies are not globally eager");
 			assert.match(prompt, /Unscoped body\./);
 			await h.call("read", { path: "backend/src/main/A.java" }, "read-1");
-			const patched = await h.fire("tool_result", { type: "tool_result", toolName: "read", toolCallId: "read-1", content: [{ type: "text", text: "file" }], isError: false });
+			const patched = await h.fire("tool_result", {
+				type: "tool_result",
+				toolName: "read",
+				toolCallId: "read-1",
+				content: [{ type: "text", text: "file" }],
+				isError: false,
+			});
 			assert.match(JSON.stringify(patched?.content), /Use records\./);
 			await h.fire("context", { type: "context", messages: [] });
 			const edit = await h.call("edit", { path: "backend/src/main/A.java", edits: [] }, "edit-1");
 			assert.equal(edit, undefined, "the edit is allowed after the read result crossed context");
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -133,7 +158,10 @@ describe("extension wiring", () => {
 			assert.match(String(blocked?.reason), /retry/i);
 			assert.equal(h.sent.length, 0);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -146,7 +174,10 @@ describe("extension wiring", () => {
 			assert.equal(blocked?.block, true);
 			assert.notEqual(blocked?.terminate, true, "a blocked batch must not stop the run, or the retry never happens");
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -159,7 +190,10 @@ describe("extension wiring", () => {
 			const blocked = await h.call("edit", { path: "backend/src/main/A.java", edits: [] }, "edit-batch");
 			assert.equal(blocked?.block, true);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -169,10 +203,19 @@ describe("extension wiring", () => {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
 			await h.call("read", { path: "backend/src/main/NotYetCreated.java" }, "read-failed");
-			const patched = await h.fire("tool_result", { type: "tool_result", toolName: "read", toolCallId: "read-failed", content: [{ type: "text", text: "missing" }], isError: true });
+			const patched = await h.fire("tool_result", {
+				type: "tool_result",
+				toolName: "read",
+				toolCallId: "read-failed",
+				content: [{ type: "text", text: "missing" }],
+				isError: true,
+			});
 			assert.match(JSON.stringify(patched?.content), /Use records\./);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -182,7 +225,16 @@ describe("extension wiring", () => {
 		try {
 			const h = harness(root, [], true, () => ({
 				entries: visible
-					? [{ sourceEntry: { type: "custom_message", customType: CUSTOM_TYPE, details: { ruleId: ".claude/rules/java.md" } }, messages: [{ role: "toolResult", content: [{ type: "text", text: "Use records." }] }] }]
+					? [
+							{
+								sourceEntry: {
+									type: "custom_message",
+									customType: CUSTOM_TYPE,
+									details: { ruleId: ".claude/rules/java.md" },
+								},
+								messages: [{ role: "toolResult", content: [{ type: "text", text: "Use records." }] }],
+							},
+						]
 					: [],
 			}));
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
@@ -194,7 +246,10 @@ describe("extension wiring", () => {
 			const blocked = await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
 			assert.equal(blocked?.block, true);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -210,7 +265,11 @@ describe("extension wiring", () => {
 		assert.equal(h.sent[0]!.details?.ruleId, ".claude/rules/java.md");
 		assert.equal(h.sent[0]!.display, false, "the model-facing message is hidden from the transcript");
 		const activation = h.entries.find((e) => e.data.kind === "activation");
-		assert.deepEqual(activation?.data.rules?.map((r) => r.name), ["java"], "a TUI-only entry shows the activation");
+		assert.deepEqual(
+			activation?.data.rules?.map((r) => r.name),
+			["java"],
+			"a TUI-only entry shows the activation",
+		);
 
 		await h.call("read", { path: join(root, "backend", "src", "main", "A.java") }, "t2");
 		await h.call("bash", { command: "cat backend/src/main/A.java" }, "t3");
@@ -224,7 +283,14 @@ describe("extension wiring", () => {
 		await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
 		const entry = h.entries.find((e) => e.data.kind === "activation")!;
 		assert.equal(h.render(entry, false), "<mdHeading>[Claude rules]</mdHeading> <dim>activated</dim> java");
-		assert.equal(h.render(entry, true), ["<mdHeading>[Claude rules]</mdHeading> <dim>activated</dim> java", "<dim>  via backend/src/main/A.java</dim>", "<dim>    java  backend/src/main/**/*.java</dim>"].join("\n"));
+		assert.equal(
+			h.render(entry, true),
+			[
+				"<mdHeading>[Claude rules]</mdHeading> <dim>activated</dim> java",
+				"<dim>  via backend/src/main/A.java</dim>",
+				"<dim>    java  backend/src/main/**/*.java</dim>",
+			].join("\n"),
+		);
 	});
 
 	it("does not inject for files outside the rule scope", async () => {
@@ -243,13 +309,21 @@ describe("extension wiring", () => {
 	});
 
 	it("remembers injected rules from the resumed session branch", async () => {
-		const fromMessage = [{ type: "custom_message", customType: CUSTOM_TYPE, details: { ruleId: ".claude/rules/java.md" } }];
+		const fromMessage = [
+			{ type: "custom_message", customType: CUSTOM_TYPE, details: { ruleId: ".claude/rules/java.md" } },
+		];
 		const h = harness(root, fromMessage);
 		await h.fire("session_start", { type: "session_start", reason: "resume" });
 		await h.call("edit", { path: "backend/src/main/A.java", edits: [] });
 		assert.equal(h.sent.length, 0);
 
-		const fromEntry = [{ type: "custom", customType: CUSTOM_TYPE, data: { kind: "activation", path: "x", rules: [{ ruleId: ".claude/rules/java.md" }] } }];
+		const fromEntry = [
+			{
+				type: "custom",
+				customType: CUSTOM_TYPE,
+				data: { kind: "activation", path: "x", rules: [{ ruleId: ".claude/rules/java.md" }] },
+			},
+		];
 		const h2 = harness(root, fromEntry);
 		await h2.fire("session_start", { type: "session_start", reason: "resume" });
 		await h2.call("edit", { path: "backend/src/main/A.java", edits: [] });
@@ -257,7 +331,10 @@ describe("extension wiring", () => {
 	});
 
 	it("appends the rule to the tool result in toolResult mode", async () => {
-		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", activation: "toolResult", notify: false }));
+		writeFileSync(
+			join(root, ".pi", "claude-rules.json"),
+			JSON.stringify({ ruleLoading: "onMatch", activation: "toolResult", notify: false }),
+		);
 		try {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
@@ -275,19 +352,28 @@ describe("extension wiring", () => {
 			assert.match(content[1]!.text, /Use records\./);
 			assert.equal(h.notices.length, 0);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
 	it("inlines unscoped rules when unscopedRules is inject", async () => {
-		writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", unscopedRules: "inject" }));
+		writeFileSync(
+			join(root, ".pi", "claude-rules.json"),
+			JSON.stringify({ ruleLoading: "onMatch", unscopedRules: "inject" }),
+		);
 		try {
 			const h = harness(root);
 			await h.fire("session_start", { type: "session_start", reason: "startup" });
 			const result = await h.fire("before_agent_start", { systemPrompt: "BASE", prompt: "hi" });
 			assert.match(String(result?.systemPrompt), /Unscoped body\./);
 		} finally {
-			writeFileSync(join(root, ".pi", "claude-rules.json"), JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }));
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
 		}
 	});
 
@@ -362,7 +448,9 @@ describe("startup summary entry", () => {
 	});
 
 	it("still appends when the branch only holds activation entries", async () => {
-		const branch: unknown[] = [{ type: "custom", customType: CUSTOM_TYPE, data: { kind: "activation", path: "x", rules: [{ ruleId: "x" }] } }];
+		const branch: unknown[] = [
+			{ type: "custom", customType: CUSTOM_TYPE, data: { kind: "activation", path: "x", rules: [{ ruleId: "x" }] } },
+		];
 		const h = harness(root, branch);
 		await h.fire("session_start", { type: "session_start", reason: "resume" });
 		assert.equal(h.summaries().length, 1);
@@ -393,7 +481,11 @@ describe("startup summary entry", () => {
 		const text = h.render(h.summaries()[0]!, false);
 		assert.equal(
 			text,
-			["<mdHeading>[Claude rules]</mdHeading>", "<dim>  always, free, java</dim>", "<dim>  3 rules: 1 always, 1 path-scoped, 1 listed</dim>"].join("\n"),
+			[
+				"<mdHeading>[Claude rules]</mdHeading>",
+				"<dim>  always, free, java</dim>",
+				"<dim>  3 rules: 1 always, 1 path-scoped, 1 listed</dim>",
+			].join("\n"),
 		);
 	});
 

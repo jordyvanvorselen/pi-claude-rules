@@ -35,7 +35,7 @@ export interface Paint {
 
 export const PLAIN: Paint = { heading: (t) => t, accent: (t) => t, dim: (t) => t };
 
-export function modeLabel(rule: Rule, settings: Settings): ModeLabel {
+export function modeLabel(rule: Rule, _settings: Settings): ModeLabel {
 	// Keep source semantics visible in the TUI even when eager mode has loaded
 	// the body already; scope metadata remains useful for deciding applicability.
 	if (rule.mode === "always") return "always";
@@ -111,7 +111,8 @@ export function renderSummary(summary: RuleSummary, paint: Paint, options: Rende
 			lines.push(paint.dim(`  ${marker}${rule.name.padEnd(width)}  ${rule.mode.padEnd(8)}  ${rule.scope}`));
 			if (options.details) {
 				if (rule.description) lines.push(paint.dim(`    ${" ".repeat(width + 2)}${rule.description}`));
-				for (const warning of rule.warnings ?? []) lines.push(paint.dim(`    ${" ".repeat(width + 2)}warning: ${warning}`));
+				for (const warning of rule.warnings ?? [])
+					lines.push(paint.dim(`    ${" ".repeat(width + 2)}warning: ${warning}`));
 			}
 		}
 	}

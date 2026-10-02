@@ -59,6 +59,7 @@ description: V1/V2 API versioning rules for the backend
 paths:
   - "connect-backend/src/main/**/*.java"
 ---
+
 # API versioning
 
 Only some APIs have both a V1 and a V2 ...
@@ -66,14 +67,14 @@ Only some APIs have both a V1 and a V2 ...
 
 ### Supported frontmatter
 
-| Key | Type | Meaning |
-|---|---|---|
-| `paths` | string or list | Globs that scope the rule. Claude Code format. |
-| `applyTo` | comma-separated string | Same as `paths`. APM and GitHub Copilot format. Commas inside `{a,b}` braces are kept. |
-| `globs` | string or list | Same as `paths`. Cursor format. |
-| `alwaysApply` | boolean | Inline the full rule body in every system prompt. |
-| `always` | boolean | Same as `alwaysApply`. |
-| `description` | string | One line summary shown in the system prompt listing. Falls back to the first Markdown heading, then to the file name. |
+| Key           | Type                   | Meaning                                                                                                               |
+| ------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `paths`       | string or list         | Globs that scope the rule. Claude Code format.                                                                        |
+| `applyTo`     | comma-separated string | Same as `paths`. APM and GitHub Copilot format. Commas inside `{a,b}` braces are kept.                                |
+| `globs`       | string or list         | Same as `paths`. Cursor format.                                                                                       |
+| `alwaysApply` | boolean                | Inline the full rule body in every system prompt.                                                                     |
+| `always`      | boolean                | Same as `alwaysApply`.                                                                                                |
+| `description` | string                 | One line summary shown in the system prompt listing. Falls back to the first Markdown heading, then to the file name. |
 
 `paths`, `applyTo`, and `globs` are synonyms. When a file uses more than one, the globs are merged.
 
@@ -87,11 +88,11 @@ Globs are matched against the path relative to the project root, which is the di
 
 Every rule ends up in one of three modes.
 
-| Mode | When | What happens |
-|---|---|---|
-| always | `alwaysApply: true` | The full body is inlined in the system prompt on every turn. |
-| path-scoped | The rule has globs | Hybrid loads it through matching read results and blocks mutations until loaded; eager includes it up front; `onMatch` injects it post-tool. |
-| unscoped | No globs and not always-apply | Hybrid and eager include it globally; `onMatch` uses `unscopedRules` to list or inline it. |
+| Mode        | When                          | What happens                                                                                                                                 |
+| ----------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| always      | `alwaysApply: true`           | The full body is inlined in the system prompt on every turn.                                                                                 |
+| path-scoped | The rule has globs            | Hybrid loads it through matching read results and blocks mutations until loaded; eager includes it up front; `onMatch` injects it post-tool. |
+| unscoped    | No globs and not always-apply | Hybrid and eager include it globally; `onMatch` uses `unscopedRules` to list or inline it.                                                   |
 
 ### How path-scoped loading works
 
@@ -123,11 +124,11 @@ Identical deployed copies at the same logical path are merged (the `.claude` ide
 
 ## Slash commands
 
-| Command | What it does |
-|---|---|
-| `/claude-rules` | List every discovered rule with its mode, globs, and path. Rules that were already injected are marked with `*`. |
-| `/claude-rules <name>` | Show one rule in full, including its activation status. |
-| `/claude-rules-reload` | Rescan the rule directories, forget which rules were injected, and print a fresh `[Claude rules]` block. |
+| Command                | What it does                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `/claude-rules`        | List every discovered rule with its mode, globs, and path. Rules that were already injected are marked with `*`. |
+| `/claude-rules <name>` | Show one rule in full, including its activation status.                                                          |
+| `/claude-rules-reload` | Rescan the rule directories, forget which rules were injected, and print a fresh `[Claude rules]` block.         |
 
 ## Configuration
 
@@ -148,18 +149,18 @@ Create `~/.pi/agent/claude-rules.json` for user-wide settings or `.pi/claude-rul
 }
 ```
 
-| Key | Default | Meaning |
-|---|---|---|
-| `directories` | `[]` | Extra rule directories. Relative paths resolve against the working directory. `~` is expanded. Both `.md` and `.mdc` files are read. |
-| `cursorRules` | `false` | Also load `.cursor/rules/*.mdc`. |
-| `ruleLoading` | `"hybrid"` | `"hybrid"` loads unscoped/always rules globally, adds scoped rules to matching read results, and blocks unprepared writes/edits. `"eager"` inlines every body before tools. `"onMatch"` injects after matching tool paths and is the least safe/post-tool mode. |
-| `unscopedRules` | `"list"` | Used in `onMatch` mode. `"list"` shows unscoped rules; `"inject"` inlines them. Hybrid and eager modes always load unscoped bodies globally. |
-| `tools` | `["read", "write", "edit"]` | Tool names whose `path` argument triggers activation. Add `grep`, `find`, or `ls` if you want directory arguments to count. |
-| `bashActivation` | `false` | Optional extension: scan bash commands for existing file paths. Enable it for `onMatch` mode if desired (including extensionless `Dockerfile` and `Makefile`). |
-| `activation` | `"message"` | `"message"` injects the rule as a steering message. `"toolResult"` appends the rule to the result of the tool call that triggered it. |
-| `startupSummary` | `"compact"` | How the `[Claude rules]` block renders at startup. `"compact"` shows the names and counts and expands with Ctrl+O. `"full"` always shows the expanded list. `"off"` shows no block. |
-| `notify` | `true` | Show a transient startup notification with the rule counts. Only used when `startupSummary` is `"off"`, since the block already carries that information. |
-| `enabled` | `true` | Set to `false` to turn the extension off for a project. |
+| Key              | Default                     | Meaning                                                                                                                                                                                                                                                         |
+| ---------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directories`    | `[]`                        | Extra rule directories. Relative paths resolve against the working directory. `~` is expanded. Both `.md` and `.mdc` files are read.                                                                                                                            |
+| `cursorRules`    | `false`                     | Also load `.cursor/rules/*.mdc`.                                                                                                                                                                                                                                |
+| `ruleLoading`    | `"hybrid"`                  | `"hybrid"` loads unscoped/always rules globally, adds scoped rules to matching read results, and blocks unprepared writes/edits. `"eager"` inlines every body before tools. `"onMatch"` injects after matching tool paths and is the least safe/post-tool mode. |
+| `unscopedRules`  | `"list"`                    | Used in `onMatch` mode. `"list"` shows unscoped rules; `"inject"` inlines them. Hybrid and eager modes always load unscoped bodies globally.                                                                                                                    |
+| `tools`          | `["read", "write", "edit"]` | Tool names whose `path` argument triggers activation. Add `grep`, `find`, or `ls` if you want directory arguments to count.                                                                                                                                     |
+| `bashActivation` | `false`                     | Optional extension: scan bash commands for existing file paths. Enable it for `onMatch` mode if desired (including extensionless `Dockerfile` and `Makefile`).                                                                                                  |
+| `activation`     | `"message"`                 | `"message"` injects the rule as a steering message. `"toolResult"` appends the rule to the result of the tool call that triggered it.                                                                                                                           |
+| `startupSummary` | `"compact"`                 | How the `[Claude rules]` block renders at startup. `"compact"` shows the names and counts and expands with Ctrl+O. `"full"` always shows the expanded list. `"off"` shows no block.                                                                             |
+| `notify`         | `true`                      | Show a transient startup notification with the rule counts. Only used when `startupSummary` is `"off"`, since the block already carries that information.                                                                                                       |
+| `enabled`        | `true`                      | Set to `false` to turn the extension off for a project.                                                                                                                                                                                                         |
 
 ## How this differs from Claude Code
 
@@ -173,9 +174,28 @@ Hybrid is the default token-saving mode. It is not fully transparent like native
 
 ```bash
 npm install
+npm run lint
 npm run typecheck
 npm test
 ```
+
+Run `npm run lint:fix` to fix lint and formatting problems.
+
+## Versioning and releases
+
+This package follows [semantic versioning](https://semver.org). Every pull request must raise the version in `package.json`. CI fails the pull request when the version is not higher than on `main`.
+
+Pick the bump that matches the change:
+
+| Change                                                | Command                                  | Example         |
+| ----------------------------------------------------- | ---------------------------------------- | --------------- |
+| Bug fix, docs, internal change                        | `npm version patch --no-git-tag-version` | `0.1.0 → 0.1.1` |
+| New feature or setting that keeps old behaviour       | `npm version minor --no-git-tag-version` | `0.1.1 → 0.2.0` |
+| Breaking change, such as a removed or renamed setting | `npm version major --no-git-tag-version` | `0.2.0 → 1.0.0` |
+
+The command updates both `package.json` and `package-lock.json`. Commit both files.
+
+When a pull request merges, GitHub Actions runs the checks again and publishes the new version to npm.
 
 Try it against a project without installing:
 

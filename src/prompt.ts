@@ -4,7 +4,12 @@ import type { Rule } from "./rules.ts";
 export const SECTION_HEADING = "## Project rules";
 
 export function isInlined(rule: Rule, settings: Settings): boolean {
-	return settings.ruleLoading === "eager" || (settings.ruleLoading === "hybrid" && rule.mode === "unscoped") || rule.mode === "always" || (rule.mode === "unscoped" && settings.unscopedRules === "inject");
+	return (
+		settings.ruleLoading === "eager" ||
+		(settings.ruleLoading === "hybrid" && rule.mode === "unscoped") ||
+		rule.mode === "always" ||
+		(rule.mode === "unscoped" && settings.unscopedRules === "inject")
+	);
 }
 
 export function scopeLabel(rule: Rule): string {
@@ -30,11 +35,24 @@ function renderEager(rules: readonly Rule[]): string {
 		group.push(rule);
 		groups.set(sourceOf(rule), group);
 	}
-	const parts: string[] = [SECTION_HEADING, "", "All discovered project rules are loaded below before the first tool call. Follow the rule whose scope matches the file you are working on.", "", "### Loaded rule bodies", ""];
+	const parts: string[] = [
+		SECTION_HEADING,
+		"",
+		"All discovered project rules are loaded below before the first tool call. Follow the rule whose scope matches the file you are working on.",
+		"",
+		"### Loaded rule bodies",
+		"",
+	];
 	for (const [source, sourceRules] of groups) {
 		parts.push(`#### ${source}`, "");
 		for (const rule of sourceRules) {
-			parts.push(`##### ${rule.title} (${rule.displayPath})`, `Scope: ${rule.mode === "scoped" ? rule.globs.join(", ") : "any task"}`, "", rule.body, "");
+			parts.push(
+				`##### ${rule.title} (${rule.displayPath})`,
+				`Scope: ${rule.mode === "scoped" ? rule.globs.join(", ") : "any task"}`,
+				"",
+				rule.body,
+				"",
+			);
 		}
 	}
 	return parts.join("\n").trimEnd();
