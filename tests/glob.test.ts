@@ -58,8 +58,12 @@ describe("matchesGlob", () => {
 		assert.ok(matchesGlob("deep/dir/login.feature", "*.feature"));
 	});
 	it("matches suffix patterns inside a name", () => {
-		assert.ok(matchesGlob("connect-backend/src/main/x/UserQueryService.java", "connect-backend/src/main/**/*QueryService.java"));
-		assert.ok(!matchesGlob("connect-backend/src/main/x/UserService.java", "connect-backend/src/main/**/*QueryService.java"));
+		assert.ok(
+			matchesGlob("connect-backend/src/main/x/UserQueryService.java", "connect-backend/src/main/**/*QueryService.java"),
+		);
+		assert.ok(
+			!matchesGlob("connect-backend/src/main/x/UserService.java", "connect-backend/src/main/**/*QueryService.java"),
+		);
 	});
 	it("matches dockerfile patterns with braces and trailing wildcards", () => {
 		assert.ok(matchesGlob("connect-backend/dockerfiles/deploy/Dockerfile", "**/dockerfiles/{deploy,dev}/Dockerfile*"));
@@ -81,6 +85,8 @@ describe("matchesGlob", () => {
 		assert.ok(!matchesGlob("aXb/c+d.ts", "a.b/c+d.ts"));
 	});
 	it("matches exact file paths", () => {
-		assert.ok(matchesGlob(".github/workflows/deploy-panel-connect.yaml", ".github/workflows/deploy-panel-connect.yaml"));
+		assert.ok(
+			matchesGlob(".github/workflows/deploy-panel-connect.yaml", ".github/workflows/deploy-panel-connect.yaml"),
+		);
 	});
 });

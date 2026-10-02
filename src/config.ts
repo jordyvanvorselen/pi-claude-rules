@@ -61,16 +61,23 @@ function readJson(file: string): Partial<Settings> {
 }
 
 export function mergeSettings(...layers: Partial<Settings>[]): Settings {
-	const merged: Settings = { ...DEFAULT_SETTINGS, directories: [...DEFAULT_SETTINGS.directories], tools: [...DEFAULT_SETTINGS.tools] };
+	const merged: Settings = {
+		...DEFAULT_SETTINGS,
+		directories: [...DEFAULT_SETTINGS.directories],
+		tools: [...DEFAULT_SETTINGS.tools],
+	};
 	for (const layer of layers) {
-		if (Array.isArray(layer.directories)) merged.directories = [...merged.directories, ...layer.directories.filter((d) => typeof d === "string")];
+		if (Array.isArray(layer.directories))
+			merged.directories = [...merged.directories, ...layer.directories.filter((d) => typeof d === "string")];
 		if (typeof layer.cursorRules === "boolean") merged.cursorRules = layer.cursorRules;
-		if (layer.ruleLoading === "hybrid" || layer.ruleLoading === "eager" || layer.ruleLoading === "onMatch") merged.ruleLoading = layer.ruleLoading;
+		if (layer.ruleLoading === "hybrid" || layer.ruleLoading === "eager" || layer.ruleLoading === "onMatch")
+			merged.ruleLoading = layer.ruleLoading;
 		if (layer.unscopedRules === "list" || layer.unscopedRules === "inject") merged.unscopedRules = layer.unscopedRules;
 		if (Array.isArray(layer.tools)) merged.tools = layer.tools.filter((t) => typeof t === "string");
 		if (typeof layer.bashActivation === "boolean") merged.bashActivation = layer.bashActivation;
 		if (layer.activation === "message" || layer.activation === "toolResult") merged.activation = layer.activation;
-		if (layer.startupSummary === "compact" || layer.startupSummary === "full" || layer.startupSummary === "off") merged.startupSummary = layer.startupSummary;
+		if (layer.startupSummary === "compact" || layer.startupSummary === "full" || layer.startupSummary === "off")
+			merged.startupSummary = layer.startupSummary;
 		if (typeof layer.notify === "boolean") merged.notify = layer.notify;
 		if (typeof layer.enabled === "boolean") merged.enabled = layer.enabled;
 	}

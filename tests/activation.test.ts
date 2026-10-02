@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { activateRules, bashCommandKind, pathsFromCommand, pathsFromToolCall, relativeToRoot, shellTokens } from "../src/activation.ts";
+import {
+	activateRules,
+	bashCommandKind,
+	pathsFromCommand,
+	pathsFromToolCall,
+	relativeToRoot,
+	shellTokens,
+} from "../src/activation.ts";
 import { DEFAULT_SETTINGS, mergeSettings } from "../src/config.ts";
 import { parseRule, type RuleSource } from "../src/rules.ts";
 
@@ -43,7 +50,10 @@ describe("pathsFromCommand", () => {
 		assert.deepEqual(pathsFromCommand("ls -la src https://x.y/z.ts missing/b.ts", cwd), []);
 	});
 	it("handles redirects, separators and ./ prefixes", () => {
-		assert.deepEqual(pathsFromCommand("echo hi >./src/a.ts; make Makefile", cwd), [join(cwd, "src", "a.ts"), join(cwd, "Makefile")]);
+		assert.deepEqual(pathsFromCommand("echo hi >./src/a.ts; make Makefile", cwd), [
+			join(cwd, "src", "a.ts"),
+			join(cwd, "Makefile"),
+		]);
 	});
 	it("ignores tokens without a slash or extension", () => {
 		assert.deepEqual(pathsFromCommand("make Makefile", cwd), [join(cwd, "Makefile")]);
@@ -60,25 +70,40 @@ describe("pathsFromToolCall", () => {
 	after(() => rmSync(cwd, { recursive: true, force: true }));
 
 	it("resolves the path field of read and edit against cwd", () => {
-		assert.deepEqual(pathsFromToolCall("edit", { path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "x.ts")]);
-		assert.deepEqual(pathsFromToolCall("read", { path: join(cwd, "src", "x.ts") }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "x.ts")]);
+		assert.deepEqual(pathsFromToolCall("edit", { path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), [
+			join(cwd, "src", "x.ts"),
+		]);
+		assert.deepEqual(pathsFromToolCall("read", { path: join(cwd, "src", "x.ts") }, cwd, DEFAULT_SETTINGS), [
+			join(cwd, "src", "x.ts"),
+		]);
 	});
 	it("keeps prospective files but rejects directories for read and edit", () => {
-		assert.deepEqual(pathsFromToolCall("read", { path: "src/missing.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "missing.ts")]);
+		assert.deepEqual(pathsFromToolCall("read", { path: "src/missing.ts" }, cwd, DEFAULT_SETTINGS), [
+			join(cwd, "src", "missing.ts"),
+		]);
 		assert.deepEqual(pathsFromToolCall("edit", { path: "src" }, cwd, DEFAULT_SETTINGS), []);
 	});
 	it("keeps new file paths for write", () => {
-		assert.deepEqual(pathsFromToolCall("write", { path: "src/new.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "new.ts")]);
+		assert.deepEqual(pathsFromToolCall("write", { path: "src/new.ts" }, cwd, DEFAULT_SETTINGS), [
+			join(cwd, "src", "new.ts"),
+		]);
 	});
 	it("ignores tools that are not configured", () => {
 		assert.deepEqual(pathsFromToolCall("grep", { path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), []);
-		assert.deepEqual(pathsFromToolCall("grep", { path: "src/x.ts" }, cwd, mergeSettings({ tools: ["grep"] })), [join(cwd, "src", "x.ts")]);
+		assert.deepEqual(pathsFromToolCall("grep", { path: "src/x.ts" }, cwd, mergeSettings({ tools: ["grep"] })), [
+			join(cwd, "src", "x.ts"),
+		]);
 	});
 	it("skips bash when bashActivation is off", () => {
-		assert.deepEqual(pathsFromToolCall("bash", { command: "cat src/x.ts" }, cwd, mergeSettings({ bashActivation: false })), []);
+		assert.deepEqual(
+			pathsFromToolCall("bash", { command: "cat src/x.ts" }, cwd, mergeSettings({ bashActivation: false })),
+			[],
+		);
 	});
 	it("accepts alternative path field names", () => {
-		assert.deepEqual(pathsFromToolCall("read", { file_path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), [join(cwd, "src", "x.ts")]);
+		assert.deepEqual(pathsFromToolCall("read", { file_path: "src/x.ts" }, cwd, DEFAULT_SETTINGS), [
+			join(cwd, "src", "x.ts"),
+		]);
 	});
 });
 
@@ -99,7 +124,10 @@ describe("activateRules", () => {
 		);
 	});
 	it("returns nothing for non matching or out of root paths", () => {
-		assert.deepEqual(activateRules([java], ["/repo/backend/src/test/A.java", "/elsewhere/backend/src/main/A.java"]), []);
+		assert.deepEqual(
+			activateRules([java], ["/repo/backend/src/test/A.java", "/elsewhere/backend/src/main/A.java"]),
+			[],
+		);
 	});
 	it("reports each rule once even when several paths match", () => {
 		const hits = activateRules([java], ["/repo/backend/src/main/A.java", "/repo/backend/src/main/B.java"]);

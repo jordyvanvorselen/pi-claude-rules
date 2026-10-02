@@ -62,7 +62,8 @@ export function normalizeFrontmatter(frontmatter: Frontmatter, body: string, nam
 		warnings.push(`alwaysApply has unrecognised value ${JSON.stringify(alwaysValue)}, treating as false`);
 	}
 	const descriptionValue = frontmatter.description;
-	const description = typeof descriptionValue === "string" && descriptionValue.trim() ? descriptionValue.trim() : undefined;
+	const description =
+		typeof descriptionValue === "string" && descriptionValue.trim() ? descriptionValue.trim() : undefined;
 	const mode: RuleMode = always ? "always" : globs.length > 0 ? "scoped" : "unscoped";
 	const knownKeys = new Set<string>([...GLOB_KEYS, ...ALWAYS_KEYS, "description", "name", "title"]);
 	for (const key of Object.keys(frontmatter)) {
@@ -143,8 +144,12 @@ function logicalDeploymentPath(rule: Rule): string {
 }
 
 function isDeployedCopy(a: Rule, b: Rule): boolean {
-	if (a.body.trim() !== b.body.trim() || a.root !== b.root || logicalDeploymentPath(a) !== logicalDeploymentPath(b)) return false;
-	return [a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.claude/rules")) && [a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.cursor/rules"));
+	if (a.body.trim() !== b.body.trim() || a.root !== b.root || logicalDeploymentPath(a) !== logicalDeploymentPath(b))
+		return false;
+	return (
+		[a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.claude/rules")) &&
+		[a.sourceDir, b.sourceDir].some((path) => path.endsWith("/.cursor/rules"))
+	);
 }
 
 export function dedupeRules(rules: Rule[]): Rule[] {
@@ -155,10 +160,12 @@ export function dedupeRules(rules: Rule[]): Rule[] {
 			result.push(rule);
 			continue;
 		}
-		const kept = existing.sourceDir.endsWith("/.claude/rules") || !rule.sourceDir.endsWith("/.claude/rules") ? existing : rule;
+		const kept =
+			existing.sourceDir.endsWith("/.claude/rules") || !rule.sourceDir.endsWith("/.claude/rules") ? existing : rule;
 		if (kept !== existing) result[result.indexOf(existing)] = kept;
 		kept.globs = [...new Set([...existing.globs, ...rule.globs])];
-		if (kept.mode !== "always") kept.mode = rule.mode === "always" ? "always" : kept.globs.length > 0 ? "scoped" : "unscoped";
+		if (kept.mode !== "always")
+			kept.mode = rule.mode === "always" ? "always" : kept.globs.length > 0 ? "scoped" : "unscoped";
 		const description = existing.description ?? rule.description;
 		if (description) {
 			kept.description = description;
@@ -170,6 +177,8 @@ export function dedupeRules(rules: Rule[]): Rule[] {
 }
 
 export function loadRules(sources: RuleSource[]): Rule[] {
-	const all = sources.flatMap((source) => loadRulesFromSource({ ...source, dir: resolve(source.dir), root: resolve(source.root) }));
+	const all = sources.flatMap((source) =>
+		loadRulesFromSource({ ...source, dir: resolve(source.dir), root: resolve(source.root) }),
+	);
 	return dedupeRules(all);
 }

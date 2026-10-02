@@ -68,7 +68,9 @@ function ownEntries(ctx: ExtensionContext): LooseEntry[] {
 function injectedFromSession(ctx: ExtensionContext, rules: readonly Rule[] = []): Set<string> {
 	const ids = new Set<string>();
 	const manager = ctx.sessionManager as ExtensionContext["sessionManager"] & {
-		buildSessionProjection?: () => { entries: { sourceEntry: { type?: string; customType?: string; details?: unknown } }[] };
+		buildSessionProjection?: () => {
+			entries: { sourceEntry: { type?: string; customType?: string; details?: unknown } }[];
+		};
 	};
 	// Projection is compaction-aware: custom messages omitted by a compaction
 	// are eligible for reinjection. Older Pi versions lack this API, so retain
@@ -78,7 +80,8 @@ function injectedFromSession(ctx: ExtensionContext, rules: readonly Rule[] = [])
 			const entry = projected.sourceEntry;
 			if (entry.type === "custom_message" && entry.customType === CUSTOM_TYPE) {
 				const details = entry.details;
-				if (details && typeof details === "object" && "ruleId" in details && typeof details.ruleId === "string") ids.add(details.ruleId);
+				if (details && typeof details === "object" && "ruleId" in details && typeof details.ruleId === "string")
+					ids.add(details.ruleId);
 			}
 			// toolResult activation stores the body in a tool-result message.
 			const text = JSON.stringify(projected.messages);
@@ -107,23 +110,34 @@ function activationIdsFromEntries(ctx: ExtensionContext): Set<string> {
 }
 
 function activatedRule(activation: Activation): ActivatedRule {
-	return { ruleId: activation.rule.id, name: activation.rule.name, displayPath: activation.rule.displayPath, globs: activation.rule.globs };
+	return {
+		ruleId: activation.rule.id,
+		name: activation.rule.name,
+		displayPath: activation.rule.displayPath,
+		globs: activation.rule.globs,
+	};
 }
 
 function activationEntry(activations: Activation[], status?: ActivationEntry["status"]): ActivationEntry {
-	const entry: ActivationEntry = { kind: "activation", path: activations[0]?.path ?? "", rules: activations.map(activatedRule) };
+	const entry: ActivationEntry = {
+		kind: "activation",
+		path: activations[0]?.path ?? "",
+		rules: activations.map(activatedRule),
+	};
 	if (status) entry.status = status;
 	return entry;
 }
 
 function pendingRuleIds(state: State): Set<string> {
 	const ids = new Set<string>();
-	for (const pending of state.pending.values()) for (const activation of pending.activations) ids.add(activation.rule.id);
+	for (const pending of state.pending.values())
+		for (const activation of pending.activations) ids.add(activation.rule.id);
 	return ids;
 }
 
 function promotePending(state: State): void {
-	for (const pending of state.pending.values()) for (const activation of pending.activations) state.injected.add(activation.rule.id);
+	for (const pending of state.pending.values())
+		for (const activation of pending.activations) state.injected.add(activation.rule.id);
 	state.pending.clear();
 }
 
@@ -153,7 +167,13 @@ function themePaint(theme: { fg: (color: never, text: string) => string }): Pain
 }
 
 export default function claudeRulesExtension(pi: ExtensionAPI) {
-	let state: State = { settings: loadSettings(process.cwd()), rules: [], sourceLabels: [], injected: new Set(), pending: new Map() };
+	let state: State = {
+		settings: loadSettings(process.cwd()),
+		rules: [],
+		sourceLabels: [],
+		injected: new Set(),
+		pending: new Map(),
+	};
 
 	const reload = (ctx: ExtensionContext) => {
 		state = freshState(ctx.cwd);
@@ -178,7 +198,8 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		const act = data as Partial<ActivationEntry>;
 		if (!act.rules?.length) return undefined;
 		const names = act.rules.map((r) => r.name).join(", ");
-		const status = act.status === "blocked" ? "blocked before edit" : act.status === "loaded" ? "loaded via read" : "activated";
+		const status =
+			act.status === "blocked" ? "blocked before edit" : act.status === "loaded" ? "loaded via read" : "activated";
 		const lines = [`${paint.heading("[Claude rules]")} ${paint.dim(status)} ${names}`];
 		if (expanded) {
 			if (act.path) lines.push(paint.dim(`  via ${act.path}`));
@@ -198,7 +219,7 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		if (state.settings.notify) ctx.ui.notify(`claude-rules: ${countsLine(summary())}`, "info");
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	pi.on("before_agent_start", async (event, _ctx) => {
 		if (!state.settings.enabled || state.rules.length === 0) return;
 		const section = renderSection(state.rules, state.settings);
 		if (!section) return;
@@ -236,14 +257,21 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 			return { block: true, reason: blockedReason(missing) };
 		}
 		if (mode === "hybrid") {
-			const bashRead = (event.toolName === "bash" || event.toolName === "powershell") && (() => {
-				const command = event.input && typeof event.input === "object" ? (event.input as Record<string, unknown>).command : undefined;
-				return typeof command === "string" && bashCommandKind(command) === "read";
-			})();
+			const bashRead =
+				(event.toolName === "bash" || event.toolName === "powershell") &&
+				(() => {
+					const command =
+						event.input && typeof event.input === "object"
+							? (event.input as Record<string, unknown>).command
+							: undefined;
+					return typeof command === "string" && bashCommandKind(command) === "read";
+				})();
 			if (!isReadLike(event.toolName) && !bashRead) return;
 		}
 
-		const fresh = matching.filter((activation) => !state.injected.has(activation.rule.id) && !pendingIds.has(activation.rule.id));
+		const fresh = matching.filter(
+			(activation) => !state.injected.has(activation.rule.id) && !pendingIds.has(activation.rule.id),
+		);
 		if (fresh.length === 0) return;
 		const deliverInResult = mode === "hybrid" || state.settings.activation === "toolResult";
 		state.pending.set(event.toolCallId, { activations: fresh, deliverInResult });
@@ -252,7 +280,12 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 		if (state.settings.activation === "toolResult") return;
 		for (const activation of fresh) {
 			pi.sendMessage(
-				{ customType: CUSTOM_TYPE, content: renderActivation(activation.rule, activation.path), display: false, details: activatedRule(activation) },
+				{
+					customType: CUSTOM_TYPE,
+					content: renderActivation(activation.rule, activation.path),
+					display: false,
+					details: activatedRule(activation),
+				},
 				{ deliverAs: "steer", triggerTurn: false },
 			);
 		}
@@ -268,14 +301,20 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 	pi.on("session_compact", async (_event, ctx) => {
 		if (state.settings.ruleLoading === "hybrid" || state.settings.ruleLoading === "onMatch") {
 			state.pending.clear();
-			state.injected = injectedFromSession(ctx, state.rules.filter((rule) => rule.mode === "scoped"));
+			state.injected = injectedFromSession(
+				ctx,
+				state.rules.filter((rule) => rule.mode === "scoped"),
+			);
 		}
 	});
 
 	pi.on("tool_result", async (event) => {
 		const pending = state.pending.get(event.toolCallId);
 		if (!pending || !pending.deliverInResult) return;
-		const extra = pending.activations.map((a) => ({ type: "text" as const, text: `\n\n${renderActivation(a.rule, a.path)}` }));
+		const extra = pending.activations.map((a) => ({
+			type: "text" as const,
+			text: `\n\n${renderActivation(a.rule, a.path)}`,
+		}));
 		return { content: [...event.content, ...extra] };
 	});
 
@@ -289,13 +328,21 @@ export default function claudeRulesExtension(pi: ExtensionAPI) {
 					ctx.ui.notify(`No rule named "${query}"`, "warning");
 					return;
 				}
-				const status = state.injected.has(rule.id) || pendingRuleIds(state).has(rule.id) ? "activated this session" : isInlined(rule, state.settings) ? "inlined in system prompt" : "not activated yet";
+				const status =
+					state.injected.has(rule.id) || pendingRuleIds(state).has(rule.id)
+						? "activated this session"
+						: isInlined(rule, state.settings)
+							? "inlined in system prompt"
+							: "not activated yet";
 				const one = renderSummary(buildSummary([rule], state.settings), PLAIN, { expanded: true, details: true });
 				ctx.ui.notify(`${one}\n    status: ${status}\n\n${rule.body}`, "info");
 				return;
 			}
 			if (state.rules.length === 0) {
-				ctx.ui.notify(`claude-rules: no rules found. Looked in: ${state.sourceLabels.join(", ") || ".claude/rules, ~/.claude/rules"}`, "info");
+				ctx.ui.notify(
+					`claude-rules: no rules found. Looked in: ${state.sourceLabels.join(", ") || ".claude/rules, ~/.claude/rules"}`,
+					"info",
+				);
 				return;
 			}
 			const known = new Set([...state.injected, ...pendingRuleIds(state)]);

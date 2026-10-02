@@ -70,7 +70,8 @@ function fallbackBlock(yaml: string): Frontmatter {
 
 function fallbackScalar(raw: string): FrontmatterValue {
 	const value = raw.trim();
-	if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return value.slice(1, -1);
+	if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+		return value.slice(1, -1);
 	if (value === "true" || value === "yes" || value === "on") return true;
 	if (value === "false" || value === "no" || value === "off") return false;
 	if (value === "null" || value === "~") return null;
