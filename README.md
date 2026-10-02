@@ -195,7 +195,7 @@ Pick the bump that matches the change:
 
 The command updates both `package.json` and `package-lock.json`. Commit both files.
 
-When a pull request merges, GitHub Actions runs the checks again and publishes the new version to npm.
+When a pull request merges, GitHub Actions runs the checks again and publishes the new version to npm. It then creates a GitHub release tagged with the version number, such as `0.1.2`. GitHub generates the release notes from the merged pull requests.
 
 Try it against a project without installing:
 
