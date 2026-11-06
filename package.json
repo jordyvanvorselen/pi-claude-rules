@@ -1,6 +1,6 @@
 {
   "name": "@jordyvanvorselen/pi-claude-rules",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Load Claude Code rules from .claude/rules into pi with hybrid read-before-mutation safety, eager loading, and post-tool compatibility modes.",
   "type": "module",
   "license": "MIT",

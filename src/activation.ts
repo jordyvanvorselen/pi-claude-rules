@@ -20,7 +20,55 @@ const READ_ONLY_COMMANDS = new Set([
 	"file",
 	"pwd",
 	"git",
+	"cd",
+	"echo",
+	"printf",
+	"wc",
+	"sort",
+	"uniq",
+	"cut",
+	"tr",
+	"nl",
+	"diff",
+	"cmp",
+	"basename",
+	"dirname",
+	"realpath",
+	"true",
 ]);
+const MUTATING_COMMANDS = new Set([
+	"tee",
+	"mv",
+	"cp",
+	"rm",
+	"rmdir",
+	"mkdir",
+	"touch",
+	"chmod",
+	"chown",
+	"truncate",
+	"ln",
+	"dd",
+	"install",
+	"unlink",
+	"perl",
+	"python",
+	"python3",
+	"node",
+]);
+const READ_ONLY_GIT_SUBCOMMANDS = new Set(["show", "diff", "status", "log", "grep", "ls-files"]);
+const FIND_MUTATING_ACTIONS = new Set([
+	"-delete",
+	"-exec",
+	"-execdir",
+	"-ok",
+	"-okdir",
+	"-fls",
+	"-fprint",
+	"-fprint0",
+	"-fprintf",
+]);
+const HARMLESS_REDIRECT_TARGETS = new Set(["/dev/null", "/dev/stdout", "/dev/stderr"]);
 
 export function isDirectory(path: string): boolean {
 	try {
@@ -52,20 +100,114 @@ export function shellTokens(command: string): string[] {
 
 export type BashCommandKind = "read" | "mutate" | "unknown";
 
-/** Conservative classification only; this is not a shell parser. */
-export function bashCommandKind(command: string): BashCommandKind {
-	const first = shellTokens(command)[0]?.toLowerCase();
+interface CommandSegments {
+	segments: string[];
+	writesFile: boolean;
+	substitutes: boolean;
+}
+
+/**
+ * Splits a command on unquoted `|`, `;`, `&`, `&&`, `||` and newlines, and
+ * strips unquoted output redirections. Redirections to /dev/null or to another
+ * file descriptor (`2>&1`) are harmless; any other target counts as a write.
+ */
+function splitCommand(command: string): CommandSegments {
+	const segments: string[] = [];
+	let current = "";
+	let quote: "'" | '"' | undefined;
+	let writesFile = false;
+	let substitutes = false;
+	const flush = () => {
+		if (current.trim()) segments.push(current.trim());
+		current = "";
+	};
+	for (let i = 0; i < command.length; i++) {
+		const char = command[i] ?? "";
+		if (quote === "'") {
+			if (char === "'") quote = undefined;
+			current += char;
+			continue;
+		}
+		if (char === "\\") {
+			current += char + (command[i + 1] ?? "");
+			i++;
+			continue;
+		}
+		if (char === "`" || (char === "$" && command[i + 1] === "(")) substitutes = true;
+		if (quote === '"') {
+			if (char === '"') quote = undefined;
+			current += char;
+			continue;
+		}
+		if (char === "'" || char === '"') {
+			quote = char;
+			current += char;
+			continue;
+		}
+		if (char === ">") {
+			let j = i + 1;
+			if (command[j] === ">" || command[j] === "|") j++;
+			if (command[j] === "&") {
+				j++;
+				while (/[\d-]/.test(command[j] ?? "")) j++;
+			} else {
+				while (command[j] === " " || command[j] === "\t") j++;
+				const start = j;
+				while (j < command.length && !/[\s|;&<>()]/.test(command[j] ?? "")) j++;
+				const target = command.slice(start, j).replace(/^["']|["']$/g, "");
+				if (!HARMLESS_REDIRECT_TARGETS.has(target)) writesFile = true;
+			}
+			// Drop the file descriptor number in front of the operator, as in `2>`.
+			current = current.replace(/(^|\s)\d+$/, "$1");
+			i = j - 1;
+			continue;
+		}
+		if (char === "&" && command[i + 1] === ">") continue;
+		if (char === "|" || char === ";" || char === "&" || char === "\n") {
+			if ((char === "|" || char === "&") && command[i + 1] === char) i++;
+			flush();
+			continue;
+		}
+		current += char;
+	}
+	flush();
+	return { segments, writesFile, substitutes };
+}
+
+function segmentKind(segment: string): BashCommandKind {
+	const tokens = shellTokens(segment);
+	while (tokens[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
+	const first = tokens[0]?.split("/").pop()?.toLowerCase();
 	if (!first) return "unknown";
-	if (/[>]|\b(?:tee|mv|cp|rm|mkdir|touch|chmod|chown|truncate|perl|python|node)\b/.test(command)) return "mutate";
-	if (first === "sed" && /\s-[^\s]*i/.test(command)) return "mutate";
+	const args = tokens.slice(1);
+	if (MUTATING_COMMANDS.has(first)) return "mutate";
+	if (first === "sed" && args.some((arg) => /^-[^-]*i/.test(arg) || arg.startsWith("--in-place"))) {
+		return "mutate";
+	}
+	if (first === "find" && args.some((arg) => FIND_MUTATING_ACTIONS.has(arg))) return "mutate";
+	if (first === "awk" && args.some((arg) => /system\s*\(|[>|]/.test(arg))) return "mutate";
+	if (first === "sort" && args.some((arg) => /^-[^-]*o|^--output/.test(arg))) return "mutate";
 	if (first === "git") {
-		const subcommand = shellTokens(command)[1]?.toLowerCase();
-		return subcommand && new Set(["show", "diff", "status", "log", "grep", "ls-files"]).has(subcommand)
-			? "read"
-			: "mutate";
+		const subcommand = args[0]?.toLowerCase();
+		return subcommand && READ_ONLY_GIT_SUBCOMMANDS.has(subcommand) ? "read" : "mutate";
 	}
 	if (READ_ONLY_COMMANDS.has(first)) return "read";
 	return "unknown";
+}
+
+/**
+ * Conservative classification only; this is not a shell parser. Every command
+ * word in a pipeline or list must be read-only for the whole command to be a
+ * read. Arguments and file names never make a command a mutation by themselves.
+ */
+export function bashCommandKind(command: string): BashCommandKind {
+	const { segments, writesFile, substitutes } = splitCommand(command);
+	if (segments.length === 0) return "unknown";
+	if (writesFile) return "mutate";
+	const kinds = segments.map(segmentKind);
+	if (kinds.includes("mutate")) return "mutate";
+	if (substitutes || kinds.includes("unknown")) return "unknown";
+	return "read";
 }
 
 export function pathsFromCommand(command: string, cwd: string): string[] {

@@ -31,6 +31,50 @@ describe("bashCommandKind", () => {
 		assert.equal(bashCommandKind("cat src/a.ts > out.txt"), "mutate");
 		assert.equal(bashCommandKind("unknown-command src/a.ts"), "unknown");
 	});
+
+	const cases: [string, ReturnType<typeof bashCommandKind>, string][] = [
+		["cat src/touch.ts", "read", "a mutating word inside a file name is an argument"],
+		["cat docs/mv-notes.md", "read", "a mutating word between path separators is an argument"],
+		["grep -r rm .", "read", "a mutating word as a search pattern is an argument"],
+		["cat scripts/node/a.ts", "read", "node in a directory name is an argument"],
+		["grep -rn '->' src", "read", "a quoted > is not a redirection"],
+		['grep "a > b" src', "read", "a double-quoted > is not a redirection"],
+		["cat a.ts 2>/dev/null", "read", "discarding stderr writes no file"],
+		["cat a.ts >/dev/null 2>&1", "read", "redirecting to /dev/null and duplicating a descriptor writes no file"],
+		["cat a.ts &>/dev/null", "read", "&> to /dev/null writes no file"],
+		["cat a.ts | grep rm | head -5", "read", "a pipeline of read-only commands is a read"],
+		["cat a.ts | wc -l && ls src; pwd", "read", "a list of read-only commands is a read"],
+		["/bin/cat a.ts", "read", "a command word with a path is classified by its base name"],
+		["LC_ALL=C grep x a.ts", "read", "leading variable assignments are skipped"],
+		["git log -- src/rm.ts", "read", "a read-only git subcommand is a read"],
+		["cat a.ts > out.txt", "mutate", "redirection to a file is a write"],
+		["cat a.ts >> out.txt", "mutate", "appending to a file is a write"],
+		["cat a.ts 2>err.log", "mutate", "redirecting stderr to a file is a write"],
+		["echo x>out.txt", "mutate", "redirection without spaces is a write"],
+		["cat a.ts | tee out.txt", "mutate", "a mutating command after a pipe is a mutation"],
+		["ls && rm a.ts", "mutate", "a mutating command after && is a mutation"],
+		["ls; touch a.ts", "mutate", "a mutating command after ; is a mutation"],
+		["ls\nmv a b", "mutate", "a mutating command on a new line is a mutation"],
+		["/bin/rm a.ts", "mutate", "a mutating command with a path is a mutation"],
+		["find . -name '*.tmp' -delete", "mutate", "find -delete removes files"],
+		["find . -exec rm {} \\;", "mutate", "find -exec runs commands"],
+		["sed -i s/a/b/ a.ts", "mutate", "sed -i edits in place"],
+		["sed --in-place s/a/b/ a.ts", "mutate", "sed --in-place edits in place"],
+		["awk '{print > \"out\"}' a.ts", "mutate", "awk can redirect output inside its program"],
+		["awk 'BEGIN{system(\"rm a\")}'", "mutate", "awk can run commands"],
+		["sort -o a.ts a.ts", "mutate", "sort -o writes a file"],
+		["git checkout src/a.ts", "mutate", "other git subcommands are mutations"],
+		["ls | xargs rm", "unknown", "xargs runs arbitrary commands"],
+		["bash -c 'cat a.ts'", "unknown", "a nested shell is not inspected"],
+		["cat $(echo a.ts)", "unknown", "command substitution is not inspected"],
+		["cat `echo a.ts`", "unknown", "backtick substitution is not inspected"],
+		["", "unknown", "an empty command is unknown"],
+	];
+	for (const [command, kind, reason] of cases) {
+		it(`classifies ${JSON.stringify(command)} as ${kind}: ${reason}`, () => {
+			assert.equal(bashCommandKind(command), kind, reason);
+		});
+	}
 });
 
 describe("pathsFromCommand", () => {

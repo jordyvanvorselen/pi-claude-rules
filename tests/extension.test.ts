@@ -181,6 +181,26 @@ describe("extension wiring", () => {
 		}
 	});
 
+	it("does not block a read-only bash command whose arguments contain a mutating word", async () => {
+		writeFileSync(
+			join(root, ".pi", "claude-rules.json"),
+			JSON.stringify({ ruleLoading: "hybrid", bashActivation: true }),
+		);
+		try {
+			const h = harness(root);
+			await h.fire("session_start", { type: "session_start", reason: "startup" });
+			const read = await h.call("bash", { command: "grep -n rm backend/src/main/A.java 2>/dev/null" }, "r1");
+			assert.equal(read?.block, undefined, "grep with rm as a pattern and stderr to /dev/null only reads");
+			const copy = await h.call("bash", { command: "cat backend/src/main/A.java | tee /tmp/a" }, "c1");
+			assert.equal(copy?.block, true, "tee after a pipe still writes a file");
+		} finally {
+			writeFileSync(
+				join(root, ".pi", "claude-rules.json"),
+				JSON.stringify({ ruleLoading: "onMatch", bashActivation: true }),
+			);
+		}
+	});
+
 	it("blocks a same-batch edit even when a read came first", async () => {
 		rmSync(join(root, ".pi", "claude-rules.json"));
 		try {
